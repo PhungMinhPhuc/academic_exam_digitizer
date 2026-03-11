@@ -1,0 +1,15 @@
+# AI Engine
+ai-engine/.env
+ai-engine/extracted_images/
+ai-engine/__pycache__/
+ai-engine/venv/
+*.json
+
+# Java Backend
+backend/target/
+backend/.idea/
+.DS_Store
+
+# Others
+*.txt
+test_sample/
