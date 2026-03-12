@@ -12,8 +12,8 @@ class DocLayoutEngine:
         self.model = YOLO(MODEL_PATH)
 
     # Analyze and crop
-    def analyze_and_crop(self, PDF_PATH, output_dir):
-        doc = pymupdf.open(PDF_PATH)
+    def analyze_and_crop(self, FILE_PATH, output_dir):
+        doc = pymupdf.open(FILE_PATH)
         figure_coords = []
 
         for page_idx, page in enumerate(doc):
@@ -26,6 +26,7 @@ class DocLayoutEngine:
             results = self.model.predict(img_path, conf=0.25) # confidence threshold
 
             img = Image.open(img_path)
+            img_width, img_height = img.size
             # Loop through each detected bounding box from YOLO
             for i, box in enumerate(results[0].boxes):
                 # Get  the class index of the detected object
@@ -36,8 +37,16 @@ class DocLayoutEngine:
                 # Nếu là Figure 
                 if label.lower() == 'figure':
                     coords = box.xyxy[0].tolist() # [x1, y1, x2, y2]
+                    # Tính toán vị trí tương đối (ví dụ: ảnh nằm ở 1/3 trên của trang)
+                    relative_y = coords[1] / img_height
                     crop_img = img.crop((coords[0], coords[1], coords[2], coords[3]))
                     crop_path = f"{output_dir}/fig_{page_idx}_{i}.png"
                     crop_img.save(crop_path)
-                    figure_coords.append({"path": crop_path, "page": page_idx})
+                    figure_coords.append({
+                        "path": crop_path,
+                        "page": page_idx,
+                        "bbox": coords,
+                        "vertical_position": relative_y # Chỉ số để neo vào câu hỏi
+                    })
         return figure_coords
+    
