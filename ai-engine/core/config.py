@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-# 1. Initialization
+# Initialization
 
 # Load file .env
 load_dotenv() 
@@ -37,7 +37,7 @@ RESPONSE_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "id": {"type": "integer"},
-                    "type": {"type": "string", "enum": ["multi_choice", "true_false", "short_answer"]},
+                    "type": {"type": "string", "enum": ["multi_choice", "true_false", "short_answer", "essay"]},
                     "latex_code": {"type": "string"},
                     "explanation": {"type": "string"}
                 },
