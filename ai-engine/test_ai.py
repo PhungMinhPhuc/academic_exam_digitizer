@@ -36,6 +36,13 @@ def process_exam():
     - For choiceTF: Always provide exactly 4 \\itemch commands inside \\begin{itemchoice} ... \\end{itemchoice}.
     - For grouped questions: Use \\sochc{n}{...} and \\begin{chc} ... \\end{chc}.
     6. Output: Strictly return a JSON object with keys: 'id', 'type', 'raw_latex'.
+            "TO",  # Toán
+        "LY",  # Vật lý
+        "HO",  # Hóa học
+        "SI",  # Sinh học
+        "SU",  # Lịch sử
+        "DI",  # Địa lý
+        "AN"   # Tiếng Anh
     """
 
     print("Processing...")
