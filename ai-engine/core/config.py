@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv() 
 
 API_KEY = os.getevn("API_KEY")
-TEMPURATURE = 0 # Deterministic output, less randomness
+TEMPERATURE = 0 # Deterministic output, less randomness
 
 RESPONSE_SCHEMA = {
     "type": "object",
