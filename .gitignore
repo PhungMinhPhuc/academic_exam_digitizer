@@ -13,3 +13,6 @@ backend/.idea/
 # Others
 *.txt
 test_sample/
+
+# Models
+*.pt

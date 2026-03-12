@@ -2,7 +2,9 @@ import os
 from dotenv import load_dotenv
 
 # 1. Initialization
-load_dotenv() # Load file .env
+
+# Load file .env
+load_dotenv() 
 
 API_KEY = os.getevn("API_KEY")
 TEMPURATURE = 0 # Deterministic output, less randomness
