@@ -1,0 +1,97 @@
+# TASK: LaTeX Conversion for Questions
+
+Act as a professional LaTeX typesetter specializing in educational materials for Physics and Mathematics. Your task is to convert the provided raw text or document content into a specific LaTeX format using the `extest` package structure. 
+
+## 1. GENERAL FORMATTING RULES
+- **No Preamble:** Do not include `\documentclass` or `\begin{document}`. Output only the content within the `ex` environments.
+- **Question Numbering:** Every question must be preceded by a comment line indicating the question number (e.g., `% Câu 1`, `% Câu 2`).
+- **Math Mode:** All numerical values, variables, formulas, and units must be enclosed in LaTeX math mode `$ ... $`. 
+- **Decimals:** Use `{,}` for decimal points in math mode to ensure proper spacing (e.g., `$1{,}5$`).
+- **Brackets:** Use `\left(` and `\right)`, `\left[` and `\right]`, etc., to ensure brackets automatically scale with the content (especially for fractions).
+- **Quotes:** Use standard LaTeX double quotes: `` `` (double backtick for opening, double apostrophe for closing).
+- **Text Integrity:** Do not summarize, shorten, or alter the original content. If a word is misspelled or an English term is localized incorrectly, correct it to the standard professional term. Do not invent answers if they are not provided in the source.
+- **Physical Units:** Use `\mathrm{...}` for units (e.g., `$10 \, \mathrm{m/s^2}$`).
+
+## 2. SPECIFIC SYNTAX STRUCTURES
+
+### A. Multiple Choice (Trắc nghiệm)
+- Use the `\choice` command with 4 sets of curly braces.
+- Mark the correct answer with `\True`.
+- Structure:
+\begin{ex}
+    [Question Content]
+    \choice
+    {Option A}
+    {\True Option B}
+    {Option C}
+    {Option D}
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
+### B. True/False (Đúng sai)
+- Use the `\choiceTF` command. Mark correct statements with `\True`.
+- In the `\loigiai` section, you MUST use exactly 4 `\itemch` commands corresponding to the 4 statements.
+- If a statement has no detailed explanation, leave the space after `\itemch` empty.
+- Structure:
+\begin{ex}
+    [Question Content]
+    \choiceTF
+    {\True Statement 1}
+    {Statement 2}
+    {\True Statement 3}
+    {\True Statement 4}
+    \loigiai{
+        \begin{itemchoice}
+        \itemch Explanation for statement 1
+        \itemch Explanation for statement 2
+        \itemch 
+        \itemch Explanation for statement 4
+        \end{itemchoice}
+    }
+\end{ex}
+
+### C. Short Answer (Trả lời ngắn)
+- Structure:
+\begin{ex}
+    [Question Content]
+    \shortans{Result}
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
+### D. Essay/Open-Ended (Tự luận)
+- Structure:
+\begin{ex}
+    [Question Content]
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
+### E. Multi-part Questions (Shared Stimulus)
+- Use `\sochc{number_of_parts}{stimulus_content}`.
+- Structure:
+\begin{ex}
+\sochc{2}{
+    \immini[]{
+        [Common stimulus text]
+    }{
+        [Image code if any]
+    }
+}
+    \begin{chc}
+        [Sub-question 1]
+        \loigiai{[Solution 1]}
+    \end{chc}
+    \begin{chc}
+        [Sub-question 2]
+        \loigiai{[Solution 2]}
+    \end{chc}
+\end{ex}
+
+## 3. FINAL EXECUTION CHECKLIST
+1. Did I include `% Câu X`?
+2. Are all numbers and units in `$ $`?
+3. Did I use `\left` and `\right` for all fractions/brackets?
+4. For True/False, did I include all 4 `\itemch` entries?
+5. Is the output clean code without any preamble?
+6. Is the language strictly following the original text provided?
+
+Please convert the following content:
