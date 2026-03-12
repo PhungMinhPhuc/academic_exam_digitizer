@@ -1,10 +1,7 @@
 import pymupdf
 import os
 
-OUTPUT = "figure_folder"
-pdf_path = "E:\Downloads\Visionary_Solutions_for_Academic_Digitization\Test_sample\Test_T_2018.pdf"
-
-def img_extraction(PDF_PATH):
+def img_extraction(PDF_PATH, OUTPUT):
     if not os.path.exists(OUTPUT): os.makedirs(OUTPUT)
     doc = pymupdf.open(PDF_PATH)
     figCount = 0
@@ -18,6 +15,3 @@ def img_extraction(PDF_PATH):
             pix.save(os.path.join(OUTPUT, f"figure_{figCount + 1}.png"))
             figCount += 1
     return figCount
-
-if __name__ == "__main__":
-    img_extraction(pdf_path)
