@@ -12,6 +12,7 @@ backend/.idea/
 
 # Others
 *.txt
+!ai-engine/prompts/*.txt
 test_sample/
 
 # Models
