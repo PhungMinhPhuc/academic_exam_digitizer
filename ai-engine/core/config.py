@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # Load file .env
 load_dotenv() 
 
-API_KEY = os.getevn("API_KEY")
+API_KEY = os.getenv("API_KEY")
 TEMPERATURE = 0 # Deterministic output, less randomness
 
 RESPONSE_SCHEMA = {
