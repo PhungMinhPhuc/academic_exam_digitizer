@@ -4,6 +4,7 @@ ai-engine/extracted_images/
 ai-engine/__pycache__/
 ai-engine/venv/
 *.json
+ai-engine/core/__pycache__
 
 # Java Backend
 backend/target/
@@ -14,6 +15,7 @@ backend/.idea/
 *.txt
 !ai-engine/prompts/*.txt
 test_sample/
+extracted_images/
 
 # Models
 *.pt
