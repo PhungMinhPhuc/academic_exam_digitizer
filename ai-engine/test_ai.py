@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 
 # 1. Khởi tạo
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=os.getenv("API_KEY"))
 
 # 2. Đường dẫn đến file cần thao tác
 # Thay tên file path ở đây
-PDF_PATH = "E:\Downloads\Visionary_Solutions_for_Academic_Digitization\Test_Sample\Test_T_2018.pdf" 
+PDF_PATH = "E:\Downloads\Visionary_Solutions_for_Academic_Digitization\Test_sample\Test_T_2018.pdf" 
 
 def process_exam():
     # Upload file PDF lên hệ thống tạm thời của Google
