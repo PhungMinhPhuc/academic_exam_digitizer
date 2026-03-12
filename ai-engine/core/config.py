@@ -7,7 +7,6 @@ load_dotenv() # Load file .env
 API_KEY = os.getevn("API_KEY")
 TEMPURATURE = 0 # Deterministic output, less randomness
 
-
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -46,4 +45,3 @@ RESPONSE_SCHEMA = {
     },
     "required": ["questions"]
 }
-
