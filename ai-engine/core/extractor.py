@@ -1,9 +1,9 @@
 import pymupdf
 import os
 
-def img_extraction(PDF_PATH, OUTPUT):
+def img_extraction(FILE_PATH, OUTPUT):
     if not os.path.exists(OUTPUT): os.makedirs(OUTPUT)
-    doc = pymupdf.open(PDF_PATH)
+    doc = pymupdf.open(FILE_PATH)
     figCount = 0
     for page in doc:
         for img in page.get_images():
