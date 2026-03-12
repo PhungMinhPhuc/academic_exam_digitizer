@@ -11,6 +11,7 @@ Act as a professional LaTeX typesetter specializing in educational materials for
 - **Quotes:** Use standard LaTeX double quotes: `` `` (double backtick for opening, double apostrophe for closing).
 - **Text Integrity:** Do not summarize, shorten, or alter the original content. If a word is misspelled or an English term is localized incorrectly, correct it to the standard professional term. Do not invent answers if they are not provided in the source.
 - **Physical Units:** Use `\mathrm{...}` for units (e.g., `$10 \, \mathrm{m/s^2}$`).
+- **All vectors: Use `\overrightarrow{...}`
 
 ## 2. SPECIFIC SYNTAX STRUCTURES
 
