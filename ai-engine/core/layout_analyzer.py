@@ -1,15 +1,17 @@
+import cv2
+from doclayout_yolo import YOLOv10
 from ultralytics import YOLO
 import pymupdf
 from PIL import Image
 from pathlib import Path
 
-MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "yolo26l-doclaynet.pt"
+MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "doclayout_yolo_docstructbench_imgsz1024.pt"
 
 class DocLayoutEngine:
     # Initalization
     def __init__(self):
         # Load DocLayout-YOLO model (requires local .pt weights)
-        self.model = YOLO(MODEL_PATH)
+        self.model = YOLOv10(MODEL_PATH)
 
     # Analyze and crop IMG
     def analyze_and_crop_img(self, IMG_PATH, output_dir, page_idx, figure_coords):
@@ -30,8 +32,10 @@ class DocLayoutEngine:
             # Convert the class index to the actual label name
             label = results[0].names[cls]
 
+            # print("Detected:", label)   # DEBUG
+
             # Nếu là Figure 
-            if label.lower() == 'figure':
+            if label.lower() in {'figure', 'picture', 'image', 'fig'}:
                 coords = box.xyxy[0].tolist() # [x1, y1, x2, y2]
                 # Tính toán vị trí tương đối (ví dụ: ảnh nằm ở 1/3 trên của trang)
                 relative_y = coords[1] / img_height
@@ -64,7 +68,13 @@ class DocLayoutEngine:
                 page_images.append(img_path)
                 self.analyze_and_crop_img(img_path, output_dir, page_idx, figure_coords)
         else:
-            self.analyze_and_crop_img(FILE_PATH, output_dir, 0, figure_coords)
+            img_dir = Path(output_dir) / "pages"
+            img_dir.mkdir(parents=True, exist_ok=True)
+            img = Image.open(FILE_PATH)
+            img_path = img_dir / "page_0.png"
+            img.save(img_path)
+            page_images.append(img_path)
+            self.analyze_and_crop_img(img_path, output_dir, 0, figure_coords)
         return page_images, figure_coords
 
 

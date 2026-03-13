@@ -6,8 +6,8 @@ from core.layout_analyzer import DocLayoutEngine
 from core.inference import call_ai_vision
 
 
-MAX_WORKERS = 10
-BATCH_SIZE = 3
+MAX_WORKERS = 1
+BATCH_SIZE = 1
 
 def run_ai(input_path):
 
@@ -51,6 +51,8 @@ def run_ai(input_path):
     # ---------------------------------------
 
     all_responses = {}
+    final_questions = []
+    results_map = {}
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {}
@@ -75,20 +77,15 @@ def run_ai(input_path):
             try:
                 result = future.result()
                 if result:
-                    # Làm sạch markdown nếu AI trả về kèm thẻ ```json
+                    # Làm sạch JSON
                     clean_result = result.strip().replace("```json", "").replace("```", "").strip()
                     parsed = json.loads(clean_result)
 
-                    # KIỂM TRA: Nếu AI trả về 1 dict thay vì list
-                    if isinstance(parsed, list):
-                        for i, page_data in enumerate(parsed):
-                            page_number = batch_idx * BATCH_SIZE + i
-                            all_responses[page_number] = page_data
+                    # Lấy đúng danh sách câu hỏi theo Schema
+                    if isinstance(parsed, dict) and "questions" in parsed:
+                        results_map[batch_idx] = parsed["questions"]
                     else:
-                        # Nếu là dict, coi như dữ liệu của trang đầu tiên trong batch
-                        page_number = batch_idx * BATCH_SIZE
-                        all_responses[page_number] = parsed
-                    print(f"Finished batch {batch_idx}")
+                        results_map[batch_idx] = [] # Hoặc xử lý nếu AI trả về list trực tiếp
             except Exception as e:
                 print(f"Error batch {batch_idx}: {e}")
 
@@ -96,25 +93,19 @@ def run_ai(input_path):
     # 4. Order pages correctly
     # ---------------------------------------
 
-    ordered_pages = [
-        all_responses[k]
-        for k in sorted(all_responses.keys())
-    ]
+    for k in sorted(results_map.keys()):
+        final_questions.extend(results_map[k])
+
+    final_output = {"questions": final_questions}
 
     # ---------------------------------------
     # 5. Save JSON result
     # ---------------------------------------
-
     with open(result_file, "w", encoding="utf-8") as f:
-        json.dump(
-            ordered_pages,
-            f,
-            indent=4,
-            ensure_ascii=False
-        )
-
+        json.dump(final_output, f, indent=4, ensure_ascii=False)
     print(f"\nDigitization Finished!")
     print(f"Result saved to: {result_file}")
+
 
     # ---------------------------------------
     # 6. Optional cleanup
@@ -127,8 +118,6 @@ def run_ai(input_path):
 
 
 if __name__ == "__main__":
-    TEST_FILE = Path("E:\Downloads\Visionary_Solutions_for_Academic_Digitization\Test_sample\Test_T_2018.pdf")
+    TEST_FILE = Path("E:\Downloads\Visionary_Solutions_for_Academic_Digitization\Test_sample\Test_T_2024.jpg")
     run_ai(TEST_FILE)
 
-
-    

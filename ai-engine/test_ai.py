@@ -17,7 +17,7 @@ def process_exam():
     sample_file = genai.upload_file(path=PDF_PATH, display_name="Exam_Paper")
 
     # Cấu hình Model
-    model = genai.GenerativeModel(model_name="gemini-3-flash-preview")
+    model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview")
 
     # Prompt - Định nghĩa mọi quy tắc extest
     PROMPT = """
@@ -36,13 +36,6 @@ def process_exam():
     - For choiceTF: Always provide exactly 4 \\itemch commands inside \\begin{itemchoice} ... \\end{itemchoice}.
     - For grouped questions: Use \\sochc{n}{...} and \\begin{chc} ... \\end{chc}.
     6. Output: Strictly return a JSON object with keys: 'id', 'type', 'raw_latex'.
-            "TO",  # Toán
-        "LY",  # Vật lý
-        "HO",  # Hóa học
-        "SI",  # Sinh học
-        "SU",  # Lịch sử
-        "DI",  # Địa lý
-        "AN"   # Tiếng Anh
     """
 
     print("Processing...")
