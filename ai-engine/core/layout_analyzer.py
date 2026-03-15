@@ -1,9 +1,9 @@
-import cv2
 from doclayout_yolo import YOLOv10
 from ultralytics import YOLO
 import pymupdf
 from PIL import Image
 from pathlib import Path
+from PIL import ImageDraw
 
 MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "doclayout_yolo_docstructbench_imgsz1024.pt"
 
@@ -25,6 +25,7 @@ class DocLayoutEngine:
 
         img = Image.open(IMG_PATH)
         img_width, img_height = img.size
+
         # Loop through each detected bounding box from YOLO
         for i, box in enumerate(results[0].boxes):
             # Get  the class index of the detected object
@@ -39,17 +40,20 @@ class DocLayoutEngine:
                 coords = box.xyxy[0].tolist() # [x1, y1, x2, y2]
                 # Tính toán vị trí tương đối (ví dụ: ảnh nằm ở 1/3 trên của trang)
                 relative_y = coords[1] / img_height
+                relative_x = round((coords[2] - coords[0])/img_width, 2)
+                # print(f"Page {page_idx} - Figure {i} horizontal_scale: {relative_x}") # DEBUG
                 crop_img = img.crop((coords[0], coords[1], coords[2], coords[3]))
-                crop_path = save_dir / f"fig_p{page_idx}_{i}.png"
+                crop_path = save_dir / f"fig_p{page_idx}_{i}_scale{relative_x}.png"
                 crop_img.save(str(crop_path))
                 figure_coords.append({
                     "path": crop_path,
                     "page": page_idx,
                     "bbox": coords,
+                    "horizontal_scale": relative_x, # X-axis occupancy ratio to autonomously synthesize `\includegraphics`
                     "vertical_position": relative_y # Chỉ số để neo vào câu hỏi
                 })
         return figure_coords
-
+    
 
     def process_layout_engine(self, FILE_PATH, output_dir):
         is_pdf = FILE_PATH.lower().endswith(".pdf")

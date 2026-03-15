@@ -1,24 +1,66 @@
 # TASK: LaTeX Conversion for Questions
 
-Act as a professional LaTeX typesetter specializing in educational materials for Physics and Mathematics. Your task is to convert the provided raw text or document content into a specific LaTeX format using the `extest` package structure. 
+Act as a professional LaTeX typesetter specializing in educational materials for Physics and Mathematics. Your task is to convert the provided raw text or document content into a specific LaTeX format using the `extest` package structure.
+- Copy the content exactly as it appears in the source.
+- Do NOT solve the problem.
 
 ## 1. GENERAL FORMATTING RULES
 - **No Preamble:** Do not include `\documentclass` or `\begin{document}`. Output only the content within the `ex` environments.
 - **Question Numbering:** Every question must be preceded by a comment line indicating the question number (e.g., `% Câu 1`, `% Câu 2`).
-- **Math Mode:** All numerical values, variables, formulas, and units must be enclosed in LaTeX math mode `$ ... $`. 
-- **Text Integrity:** Do not summarize, shorten, or alter the original content. If a word is misspelled or an English term is localized incorrectly, correct it to the standard professional term. Do not invent answers if they are not provided in the source.
+- **Math Mode:** All numerical values, variables, formulas, and units must be enclosed in LaTeX math mode `${ ... }$`, MUST use `{` and `}` inside `$` (eg. ${1}$)
+- **Text Integrity:** Do not summarize, shorten, or alter the original content. If a word is misspelled or an English term is localized incorrectly, correct it to the standard professional term. Do not invent answers `\True` if they are not provided in the source.
 - **Decimals:** Use `{,}` for decimal points in math mode to ensure proper spacing (e.g., `$1{,}5$`).
 - **Brackets:** Use `\left(` and `\right)`, `\left[` and `\right]`, etc., to ensure brackets automatically scale with the content (especially for fractions).
 - **Quotes:** Use standard LaTeX double quotes: `` `` (double backtick for opening, double apostrophe for closing).
-- **Physical Units:** Use `\mathrm{...}` for units (e.g., `$10 \, \mathrm{m/s^2}$`).
+- **Physical Units:** Use `\mathrm{...}` for units (e.g., `${10 \, \mathrm{m/s^2}}$`).
 - **All vectors: Use `\overrightarrow{...}`
-- **Terminology Standardization:** If names of vectors, scientists, physical constants, units, or technical terms are incorrectly localized, misspelled, or written in non-standard Vietnamese forms, convert them to their internationally accepted standard forms (e.g., Newton, Coulomb, Joule, Ampere, Ohm). Do not keep incorrect or informal variants.
-- All variation tables or sign tables MUST be written using the tkz-tab package.
-- Use the commands \tkzTabInit, \tkzTabLine, and \tkzTabVar.
+- **Terminology Standardization:** If names of vectors, scientists, physical constants, units, or technical terms are incorrectly localized, misspelled, or written in non-standard Vietnamese forms, convert them to their internationally accepted standard forms (e.g., Newton, Coulomb, Joule, Ampere, Ohm, Vector). Do not keep incorrect or informal variants.
+- For simultaneous equations (AND), use: `\left\{\begin{aligned} #1 \end{aligned}\right`.
+- For alternative conditions (OR), use: `\left[\begin{aligned} #1 \end{aligned}\right`.
+- Do not use the 'cases' environment.
+- For integrals, always use `\int\limits_{lower}^{upper}` to ensure limits are placed vertically.
+- Absolutely NO periods/dots (.) at the end of any option within \choice or \choiceTF commands. Example: Use \choice{Đáp án A}{Đáp án B}{...}{...} INSTEAD OF \choice{Đáp án A.}{Đáp án B.}{...}{...}
 - Do NOT use tabular for variation tables.
+- All variation tables or sign tables MUST be written using the tkz-tab package, use tkz-tab with the format:
+Use the following structure for variation tables:
+`\begin{tikzpicture}
+    \tkzTab
+    {$x$/0.8, $f'(x)$/0.8, $f(x)$/3}
+    {$-\infty$, $-1$, $1$, $3$, $+\infty$}
+    {,+,0,-,d,-,0,+,}
+    { -/ $-\infty$, +/ $-4$, -D+ / $-\infty$ / $+\infty$, -/ $4$, +/$+\infty$}
+\end{tikzpicture}`
+- 'd' represents a double vertical line (undefined point).
+- 'D+' or 'D-' represents limits at points of discontinuity.
+
+
+##
+-** Function Graphing (TikZ):
 - **If a question contains a graph, function plot, or geometric shape, you MUST write TikZ code to recreate it.
+- MUST use the Stealth arrow style: `[>={Stealth[length=8pt, width=6pt]}]`
+- Example structure:
+`\begin{tikzpicture}[>={Stealth[length=8pt, width=6pt]}]
+    \draw[->] (-4.5,0) -- (4.5,0) node[below]{$x$};
+    \draw[->] (0,-5.5) -- (0,3.5) node[left]{$y$};
+    \draw[thick,smooth,samples=100,domain=-4:4] plot(\x,{-1/4*(\x)^3+3*(\x)-1});
+    \draw [fill=white,draw=black] (0,0) circle (1pt) node[below left]{$O$};
+\end{tikzpicture}`
 - **Use the provided cropped images (the ones after the full page images) to see the details of the figures.
 - **Match the figure's vertical position with the corresponding question text.
+- If a figure is complex (e.g., photos, detailed diagrams, or hand-drawn images), DO NOT recreate it using TikZ. Instead, include it as an image using `\includegraphics`.
+REFERENCING:
+Use the provided "Asset Manifest" to obtain the correct image filename.
+Example filename: `extracted_images/extracted_figures/fig_p0_1_scale0.2.png`
+SCALE RULE:
+The value of <scale> MUST match the number in the filename.
+For example, if the filename is: `fig_p0_1_scale0.2.png`
+then you MUST use: `width=0.2\linewidth`
+PLACEMENT: 
+   - Use `\begin{center} \includegraphics[width=<scale>\linewidth]{...} \end{center}` for centered images.
+   - Use `\immini[thm]{\includegraphics[width=<scale>\linewidth]{...}}` if the image should be next to the text. (MUST use `thm`)
+
+- **Normally, each question starts with "Câu ##"
+- ** Some explanation contain a line such as "Chọn X", "Đúng", "Sai", ... (e.g., "Chọn A", "Chọn B", "Chọn C", "Chọn D", "Đúng", "Sai", "Hướng dẫn giải", "(Group Vật lý Physics)",...), when writing the solution or explanation, DO NOT include or repeat this line. The explanation should directly explain the reasoning without mentioning "Chọn X",...
 
 ## 2. SPECIFIC SYNTAX STRUCTURES
 
@@ -35,6 +77,7 @@ Act as a professional LaTeX typesetter specializing in educational materials for
     {Option D}
     \loigiai{[Detailed Solution]}
 \end{ex}
+
 
 ### B. True/False (Đúng sai)
 - Use the `\choiceTF` command. Mark correct statements with `\True`.
@@ -73,8 +116,24 @@ Act as a professional LaTeX typesetter specializing in educational materials for
     \loigiai{[Detailed Solution]}
 \end{ex}
 
+- Or structure (if have image next question content \choice, \choiceTF): MUST use `thm`
+\begin{ex}
+\immini[thm]{
+        [Question Content]
+    }{
+        [Image code if any]
+    }
+    \choice
+    {Option A}
+    {\True Option B}
+    {Option C}
+    {Option D}
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
 ### E. Multi-part Questions (Shared Stimulus)
 - Use `\sochc{number_of_parts}{stimulus_content}`.
+- DO NOT use thm inside \sochc{number_of_parts}{stimulus_content}
 - Structure:
 \begin{ex}
 \sochc{2}{
@@ -101,5 +160,8 @@ Act as a professional LaTeX typesetter specializing in educational materials for
 4. For True/False, did I include all 4 `\itemch` entries?
 5. Is the output clean code without any preamble?
 6. Is the language strictly following the original text provided?
+7. Is the double quotes: `` `` (double backtick for opening, double apostrophe for closing) ?
+8. Are equations written using ${...}$?
+
 
 Please convert the following content:

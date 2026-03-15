@@ -70,7 +70,7 @@ def call_ai_vision(images_path, figure_manifest):
     # -------------------------------
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3-flash-preview",
         contents=images + [user_prompt],
         config=types.GenerateContentConfig(
             temperature=TEMPERATURE,

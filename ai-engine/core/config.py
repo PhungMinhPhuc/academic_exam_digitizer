@@ -18,10 +18,8 @@ RESPONSE_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "id": {"type": "integer"},
-                    # "grade": {"type": "integer", "enum": [1,2,3,4,5,6,7,8,9,10,11,12]},
                     "type": {"type": "string", "enum": ["multi_choice", "true_false", "short_answer", "essay"]},
-                    "latex_code": {"type": "string"},
-                    "explanation": {"type": "string"}
+                    "latex_code": {"type": "string"}
                 },
                 "required": ["id", "type", "latex_code"]
             }

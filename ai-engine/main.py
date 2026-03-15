@@ -4,16 +4,18 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.layout_analyzer import DocLayoutEngine
 from core.inference import call_ai_vision
+from core.formatter import json_to_raw_tex, compile_main_pdf
 
 
-MAX_WORKERS = 1
-BATCH_SIZE = 1
+MAX_WORKERS = 5
+BATCH_SIZE = 3
 
 def run_ai(input_path):
 
     input_file = Path(input_path)
-    output_folder = Path("extracted_images")
-    result_file = Path("ket_qua_so_hoa.json")
+    BASE_DIR = Path(input_path).resolve().parent
+    IMAGE_DIR = BASE_DIR / "extracted_images"
+    result_file = BASE_DIR / "ket_qua_so_hoa.json"
 
     if not input_file.exists():
         print(f"Error: File {input_path} does not exist.")
@@ -25,10 +27,7 @@ def run_ai(input_path):
 
     analyzer = DocLayoutEngine()
 
-    page_images, figure_manifest = analyzer.process_layout_engine(
-        str(input_file),
-        str(output_folder)
-    )
+    page_images, figure_manifest = analyzer.process_layout_engine(str(input_file), str(IMAGE_DIR))
 
     if not page_images:
         print("Error: Cannot render pages.")
@@ -116,8 +115,12 @@ def run_ai(input_path):
     #     if os.path.exists(img_path):
     #         os.remove(img_path)
 
+    JSON_OUTPUT = BASE_DIR / "ket_qua_so_hoa.json"
+    INPUT_TEX = BASE_DIR / "input.tex" # File nội dung thô
+    json_to_raw_tex(JSON_OUTPUT, INPUT_TEX)
+        
+    compile_main_pdf(BASE_DIR, "main.tex")
 
 if __name__ == "__main__":
-    TEST_FILE = Path("E:\Downloads\Visionary_Solutions_for_Academic_Digitization\Test_sample\Test_T_2024.jpg")
+    TEST_FILE = Path("E:/Downloads/Visionary_Solutions_for_Academic_Digitization/Test_sample/VL_2025_227_p3.jpg")
     run_ai(TEST_FILE)
-
