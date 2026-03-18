@@ -122,5 +122,5 @@ def run_ai(input_path):
     compile_main_pdf(BASE_DIR, "main.tex")
 
 if __name__ == "__main__":
-    TEST_FILE = Path("E:/Downloads/Visionary_Solutions_for_Academic_Digitization/Test_sample/VL_2025_227_p3.jpg")
+    TEST_FILE = Path("E:/Downloads/Visionary_Solutions_for_Academic_Digitization/Test_sample/T_TK_2024_p1.png")
     run_ai(TEST_FILE)
