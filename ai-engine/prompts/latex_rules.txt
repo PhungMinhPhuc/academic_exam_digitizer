@@ -60,7 +60,7 @@ PLACEMENT:
    - Use `\immini[thm]{\includegraphics[width=<scale>\linewidth]{...}}` if the image should be next to the text. (MUST use `thm`)
 
 - **Normally, each question starts with "Câu ##"
-- ** Some explanation contain a line such as "Chọn X", "Đúng", "Sai", ... (e.g., "Chọn A", "Chọn B", "Chọn C", "Chọn D", "Đúng", "Sai", "Hướng dẫn giải", "(Group Vật lý Physics)",...), when writing the solution or explanation, DO NOT include or repeat this line. The explanation should directly explain the reasoning without mentioning "Chọn X",...
+- ** Some explanation contain a line such as "Chọn X", "Đúng", "Sai", ... (e.g., "Chọn A", "Chọn B", "Chọn C", "Chọn D", "Đúng", "Sai", "Hướng dẫn giải", "(Group Vật lý Physics)",...), when writing the solution or explanation, DO NOT include or repeat this line. The explanation should directly explain the reasoning without mentioning "Chọn X", "Đúng", "Sai"...
 
 ## 2. SPECIFIC SYNTAX STRUCTURES
 
@@ -93,7 +93,7 @@ PLACEMENT:
     {\True Statement 4}
     \loigiai{
         \begin{itemchoice}
-        \itemch Explanation for statement 1
+        \itemch 
         \itemch Explanation for statement 2
         \itemch 
         \itemch Explanation for statement 4
@@ -116,7 +116,7 @@ PLACEMENT:
     \loigiai{[Detailed Solution]}
 \end{ex}
 
-- Or structure (if have image next question content \choice, \choiceTF): MUST use `thm`
+- Or structure (if have image next question content \choice, \choiceTF): MUST use `thm`, Any image inside `\loigiai{}` or image next solution content `\loigiai{}` MUST always be centered using `\begin{center}...\end{center}`
 \begin{ex}
 \immini[thm]{
         [Question Content]
@@ -132,12 +132,11 @@ PLACEMENT:
 \end{ex}
 
 ### E. Multi-part Questions (Shared Stimulus)
-- Use `\sochc{number_of_parts}{stimulus_content}`.
-- DO NOT use thm inside \sochc{number_of_parts}{stimulus_content}
+- Use `\sochc{number_of_parts}{stimulus_content}`, and stimulus_content MUST same line with `\sochc{}{Content}`
+- DO NOT use `thm` inside \sochc{number_of_parts}{stimulus_content}
 - Structure:
 \begin{ex}
-\sochc{2}{
-    \immini[]{
+\sochc{2}{\immini[]{
         [Common stimulus text]
     }{
         [Image code if any]
@@ -155,13 +154,13 @@ PLACEMENT:
 
 ## 3. FINAL EXECUTION CHECKLIST
 1. Did I include `% Câu X`?
-2. Are all numbers and units in `$ $`?
+2. Are all numbers and units in `${...}$`?
 3. Did I use `\left` and `\right` for all fractions/brackets?
 4. For True/False, did I include all 4 `\itemch` entries?
 5. Is the output clean code without any preamble?
 6. Is the language strictly following the original text provided?
 7. Is the double quotes: `` `` (double backtick for opening, double apostrophe for closing) ?
-8. Are equations written using ${...}$?
+8. Do all equations have both the opening ${ and the closing }$
 
 
 Please convert the following content:

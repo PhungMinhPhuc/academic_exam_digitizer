@@ -8,7 +8,7 @@ from core.formatter import json_to_raw_tex, compile_main_pdf
 
 
 MAX_WORKERS = 5
-BATCH_SIZE = 3
+BATCH_SIZE = 4
 
 def run_ai(input_path):
 
@@ -122,5 +122,5 @@ def run_ai(input_path):
     compile_main_pdf(BASE_DIR, "main.tex")
 
 if __name__ == "__main__":
-    TEST_FILE = Path("E:/Downloads/Visionary_Solutions_for_Academic_Digitization/Test_sample/T_TK_2024_p1.png")
+    TEST_FILE = Path("E:/Downloads/Visionary_Solutions_for_Academic_Digitization/Test_sample/VD.png")
     run_ai(TEST_FILE)
