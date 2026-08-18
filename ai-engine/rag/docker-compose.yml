@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: exam-rag-postgres
+    environment:
+      POSTGRES_DB: exam_rag
+      POSTGRES_USER: exam_rag
+      POSTGRES_PASSWORD: ${RAG_POSTGRES_PASSWORD:-rag_local}
+    ports:
+      - "${RAG_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - exam_rag_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam_rag -d exam_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  exam_rag_pgdata:

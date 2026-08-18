@@ -1,0 +1,85 @@
+- Multiple Choice Structure:
+\begin{ex}
+    [Question Content]
+    \choice
+    {Option A}
+    {\True Option B}
+    {Option C}
+    {Option D}
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
+
+
+- True False Structure: MUST use exactly 4 `\itemch` commands corresponding to the 4 statements
+\begin{ex}
+    [Question Content]
+    \choiceTF[1]
+    {\True Statement 1}
+    {Statement 2}
+    {\True Statement 3}
+    {\True Statement 4}
+    \loigiai{
+        \begin{itemchoice}
+        \itemch Explanation for statement 1
+        \itemch Explanation for statement 2
+        \itemch 
+        \itemch Explanation for statement 4
+        \end{itemchoice}
+    }
+\end{ex}
+
+
+
+- Short Answer Structure:
+\begin{ex}
+    [Question Content]
+    \shortans{Result}
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
+
+- Essay/Open-Ended Structure:
+\begin{ex}
+    [Question Content]
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
+
+
+- Or structure (if have image next question content \choice, \choiceTF): MUST use `thm`
+\begin{ex}
+\immini[thm]{
+        [Question Content]
+    }{
+        [Image code if any]
+    }
+    \choice
+    {Option A}
+    {\True Option B}
+    {Option C}
+    {Option D}
+    \loigiai{[Detailed Solution]}
+\end{ex}
+
+
+
+- Multi-part Questions (Shared Stimulus) structure. Use `\sochc{number_of_parts}{stimulus_content}`. DO NOT use `thm` inside `\sochc{number_of_parts}`{stimulus_content}
+
+\begin{ex}
+\sochc{2}{
+    \immini[]{
+        [Common stimulus text]
+    }{
+        [Image code if any]
+    }
+}
+    \begin{chc}
+        [Sub-question 1]
+        \loigiai{[Solution 1]}
+    \end{chc}
+    \begin{chc}
+        [Sub-question 2]
+        \loigiai{[Solution 2]}
+    \end{chc}
+\end{ex}

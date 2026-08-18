@@ -5,6 +5,7 @@ ai-engine/__pycache__/
 ai-engine/venv/
 *.json
 ai-engine/core/__pycache__
+ai-engine/rag/artifacts/
 
 # Java Backend
 backend/target/
