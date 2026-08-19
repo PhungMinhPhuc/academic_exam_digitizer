@@ -21,3 +21,4 @@ data/pdfs/
 backend/target/
 backend/.idea/
 .DS_Store
+.idea/
