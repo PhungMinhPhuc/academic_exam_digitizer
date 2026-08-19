@@ -8,10 +8,25 @@ Các lệnh dưới đây chạy từ thư mục `ai-engine/`.
 ## 1. Cài đặt và khởi động PostgreSQL
 
 ```powershell
-..\.venv\Scripts\python.exe -m pip install sentence-transformers "psycopg[binary]" pgvector bm25s modal
+python -m pip install -r rag\requirements.txt
 docker compose -f rag\docker-compose.yml up -d
 $env:RAG_DATABASE_URL = "postgresql://exam_rag:rag_local@localhost:5432/exam_rag"
 ```
+
+## Luồng chạy
+
+```text
+data/subject_embed/*.json
+  ├─ rag.vectorize     → embedding → PostgreSQL/pgvector
+  └─ rag.build_bm25s   → index → rag/artifacts/bm25s
+
+1 câu hỏi  → rag.search       → HybridSearcher → curriculum.py → kết quả bài học
+Cả đề      → rag.batch_search → tách câu hỏi   → HybridSearcher từng câu → JSON
+```
+
+Chạy lại `vectorize` và `build_bm25s` sau khi thay đổi dữ liệu
+`data/subject_embed/`. `batch_search` dùng lại `HybridSearcher` của `search`,
+không tạo index riêng.
 
 ## 2. Tạo index
 
@@ -19,22 +34,22 @@ Nguồn mặc định là toàn bộ `data/subject_embed/*.json`.
 
 ```powershell
 # Vector: xóa section cũ theo từng book_id rồi ingest lại
-..\.venv\Scripts\python.exe -m rag.vectorize
+python -m rag.vectorize
 
 # BM25s: rebuild toàn bộ corpus
-..\.venv\Scripts\python.exe -m rag.build_bm25s
+python -m rag.build_bm25s
 ```
 
 Chạy riêng một sách:
 
 ```powershell
-# Vector: append mặc định; dùng replace để xóa section cũ của sách trước
-..\.venv\Scripts\python.exe -m rag.vectorize `
+# Vector: append mặc định; dùng overwrite để xóa section cũ của sách trước
+python -m rag.vectorize `
   --source ..\data\subject_embed\math10_embed.json `
-  --mode replace
+  --mode overwrite
 
 # BM25s: chọn append cho nguồn mới hoặc overwrite cho nguồn đã có
-..\.venv\Scripts\python.exe -m rag.build_bm25s `
+python -m rag.build_bm25s `
   --source ..\data\subject_embed\math10_embed.json `
   --mode overwrite
 ```
@@ -44,29 +59,28 @@ Mỗi JSON phải có `book_id` ở cấp cao nhất. Model mặc định là
 
 ## 3. Tìm kiếm
 
+### Tìm kiếm 1 câu hỏi
+
+Tìm kiếm bằng text gốc:
+
 ```powershell
-..\.venv\Scripts\python.exe -m rag.search `
+python -m rag.search `
   --original-query `
   --no-formula-rewrite `
   --no-method-rewrite `
   --no-rerank
 ```
 
-Dán câu hỏi vào terminal và nhập một dòng trống để chạy. Lệnh trên chỉ truy hồi
-bằng câu hỏi gốc và không gọi Modal.
+Dán câu hỏi vào terminal và nhập một dòng trống để chạy.
 
 Deploy các worker rewrite và rerank lên hai Modal app:
 
 ```powershell
-..\.venv\Scripts\modal.exe deploy rag\rewrite_modal.py
-..\.venv\Scripts\modal.exe deploy rag\rerank_modal.py
+python -m modal deploy rag\rewrite_modal.py
+python -m modal deploy rag\rerank_modal.py
 ```
 
-Formula/method rewrite mặc định dùng `qwen3-14b-awq`. Chọn Qwen3-4B bằng:
-
-```powershell
-..\.venv\Scripts\python.exe -m rag.search --formula-rewrite-model qwen3-4b
-```
+Formula/method rewrite dùng `qwen3-4b`.
 
 `formula rewrite` chỉ mô tả từng công thức và không suy diễn. `method rewrite`
 đọc toàn câu hỏi, sinh method query cùng dữ kiện liên quan, mục tiêu, hướng biến
@@ -81,47 +95,35 @@ Ba query view được điều khiển riêng:
 --method-rewrite / --no-method-rewrite
 ```
 
-Mặc định bật original + formula và tắt method. Chạy method-only bằng:
+Mặc định bật original + formula và tắt method.
 
 ```powershell
-..\.venv\Scripts\python.exe -m rag.search `
+python -m rag.search `
   --no-original-query `
   --no-formula-rewrite `
   --method-rewrite
 ```
 
-Ít nhất một view phải được bật. Nếu method-only nhưng worker không tạo được
-`method_query` hợp lệ, lệnh báo lỗi thay vì âm thầm dùng original.
+Có thể bật nhiều dạng query cùng lúc, các kết quả sẽ được kết hợp bằng RRF. Ít nhất một view phải được bật. 
 
 Rerank mặc định dùng `qwen3-reranker-4b`. Có thể chọn bản nhẹ hơn bằng
-`--rerank-model qwen3-reranker-0.6b`; `--rerank-class-name` cho phép trỏ tới một
-Modal class khác có cùng contract mà không sửa luồng search. Dùng `--no-rerank`
-để giữ nguyên thứ tự RRF khi benchmark hoặc khi worker chưa deploy.
+`--rerank-model qwen3-reranker-0.6b`;. 
+
+Mặc định reranker vẫn dùng `original_query`. Chạy lệnh sau để thử `structured rerank query` được
+tạo bằng LLM:
 
 ```powershell
-..\.venv\Scripts\python.exe -m rag.search `
-  --rerank-model qwen3-reranker-0.6b
-```
-
-Mặc định reranker vẫn dùng `original_query`. Để thử structured rerank query được
-tạo deterministic từ phần nhỏ đang hỏi và method analysis:
-
-```powershell
-..\.venv\Scripts\python.exe -m rag.search `
+python -m rag.search `
   --method-rewrite `
   --rerank-query-mode structured `
   --rerank-method-min-confidence 0.7 `
   --debug
 ```
 
-Nếu method analysis thiếu, sai schema, có confidence dưới ngưỡng hoặc query chứa
-nhiều phần nhỏ chưa tách, structured mode fallback về `original_query`. Candidate
-vẫn đến từ vector + BM25 + RRF; reranker không sinh Grade/Chapter/Lesson.
-
-Các bộ lọc đều tùy chọn:
+Các flag tùy chọn:
 
 ```powershell
-..\.venv\Scripts\python.exe -m rag.search `
+python -m rag.search `
   --original-query `
   --no-formula-rewrite `
   --no-method-rewrite `
@@ -132,9 +134,6 @@ Các bộ lọc đều tùy chọn:
   --debug
 ```
 
-Mỗi query view chạy vector + BM25 riêng. Tất cả ranking được hợp nhất bằng RRF
-với `rrf_k=20`; query trùng được loại trước retrieval. Chỉ tối đa 10 kết quả RRF
-đầu được rerank bằng query theo `--rerank-query-mode` trước khi cắt `top_k`.
 Không có `--debug`, output chỉ gồm:
 
 ```json
@@ -158,7 +157,7 @@ Tiêu đề chương, bài (bao gồm tiền tố `Chương N.` và `Bài N.`) l
 `test/result_math1.json`:
 
 ```powershell
-..\.venv\Scripts\python.exe -m rag.batch_search `
+python -m rag.batch_search `
   --input ..\test\math1.txt `
   --output ..\test\result_math1.json `
   --formula-rewrite-model qwen3-4b `
@@ -171,11 +170,10 @@ phân loại từng query được in trên console. Các câu có phần `a)`, 
 tách thành đề chung cộng với từng phần tương ứng. `Complexity` mặc định là
 `null` để dành cho model đánh giá sau này.
 
-Để lưu riêng 10 candidates sau rerank của mỗi câu mà không đổi schema file kết
-quả chính:
+Có thể lưu riêng candidates để debug của mỗi câu:
 
 ```powershell
-..\.venv\Scripts\python.exe -m rag.batch_search `
+python -m rag.batch_search `
   --input ..\test\math1.txt `
   --output ..\test\result_math1.json `
   --debug-output ..\test\result_math1_debug.json `
@@ -183,34 +181,6 @@ quả chính:
   --subject Toán
 ```
 
-Mỗi query trong file debug có classification cuối, các query view, timing và
-mảng `candidates`. Mỗi candidate kèm provenance vector/BM25 theo original,
-formula hoặc method, điểm RRF và rerank.
-
-Khi formula hoặc method rewrite cùng rerank được bật, batch mặc định dùng
-`--modal-warmup`: gửi hai
-warmup call bằng `spawn()` trước rồi mới chờ kết quả, nên hai container nạp model
-đồng thời. Query đầu tiên chỉ chạy sau khi cả hai worker báo `ready`. Dùng
-`--no-modal-warmup` để quay lại khởi động tuần tự theo nhu cầu.
-
-Khi formula hoặc method rewrite được bật, batch mặc định stream stdout của Modal
-worker về cùng terminal (`--formula-rewrite-modal-logs`). Dùng
-`--no-formula-rewrite-modal-logs` nếu chỉ muốn log tiến độ local. Rerank có cặp
-flag tương ứng `--rerank-modal-logs` và
-`--no-rerank-modal-logs`. Có thể theo dõi độc lập log trong terminal khác:
-
-```powershell
-..\.venv\Scripts\modal.exe app logs exam-rag-qwen3-rewrite -f --timestamps
-..\.venv\Scripts\modal.exe app logs exam-rag-qwen3-rerank -f --timestamps
-```
-
-Worker ghi các mốc nạp model, nhận request, bắt đầu/kết thúc generate, fallback
-và thời gian; không ghi nguyên văn câu hỏi.
-
-## 5. Xóa database local
-
-Lệnh sau xóa toàn bộ dữ liệu PostgreSQL local:
-
-```powershell
-docker compose -f rag\docker-compose.yml down -v
-```
+Khi formula hoặc method rewrite cùng rerank được bật, xử lý theo giai đoạn:
+rewrite toàn bộ query, giải phóng model rewrite, rồi nạp reranker và xử lí toàn bộ
+candidates.

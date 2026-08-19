@@ -85,6 +85,24 @@ class RerankTests(unittest.TestCase):
         spawn = modal_module.Cls.from_name.return_value.return_value.warmup.spawn
         spawn.assert_called_once_with()
 
+    def test_modal_backend_releases_the_remote_worker(self) -> None:
+        modal_module = MagicMock()
+        modal_module.Cls.from_name.return_value.return_value.release.remote.return_value = {
+            "status": "released"
+        }
+        backend = ModalRerankBackend(
+            app_name="rerank-app",
+            class_name="ReplacementReranker",
+            model="replacement",
+        )
+
+        with patch.dict("sys.modules", {"modal": modal_module}):
+            result = backend.release()
+
+        self.assertEqual(result, {"status": "released"})
+        remote = modal_module.Cls.from_name.return_value.return_value.release.remote
+        remote.assert_called_once_with()
+
     def test_candidates_are_copied_and_sorted_by_score(self) -> None:
         candidates = [
             {"section_id": "first", "content": "Tài liệu thứ nhất", "hybrid_score": 0.9},

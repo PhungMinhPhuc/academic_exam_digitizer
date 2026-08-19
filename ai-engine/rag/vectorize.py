@@ -55,12 +55,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=("append", "replace"),
+        choices=("append", "overwrite"),
         default=None,
         help=(
             "For --source: append (default) keeps existing sections, while "
-            "replace clears the selected book first. Full-folder ingestion "
-            "defaults to replace."
+            "overwrite clears the selected book first. Full-folder ingestion "
+            "defaults to overwrite."
         ),
     )
     parser.add_argument("--model", default=DEFAULT_MODEL)
@@ -83,7 +83,7 @@ def main() -> None:
     if args.book_id and len(source_paths) != 1:
         parser.error("--book-id can only be used together with --source")
 
-    mode = args.mode or ("append" if args.source else "replace")
+    mode = args.mode or ("append" if args.source else "overwrite")
     source_data: list[tuple[Path, list[dict], str]] = []
     for source_path in source_paths:
         payload, records = load_records(source_path)
@@ -99,7 +99,7 @@ def main() -> None:
 
     store = PgVectorStore(args.dsn)
     store.initialize()
-    if mode == "replace":
+    if mode == "overwrite":
         for book_id in sorted({book_id for _, _, book_id in source_data}):
             deleted_count = store.delete_book_sections(book_id)
             print(f"Removed {deleted_count} existing sections for book_id={book_id}")

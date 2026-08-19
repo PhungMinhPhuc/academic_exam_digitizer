@@ -6,7 +6,6 @@ import argparse
 import json
 import logging
 import os
-from contextlib import nullcontext
 from time import perf_counter
 from pathlib import Path
 from typing import Any, Callable
@@ -40,6 +39,7 @@ from .rewrite import (
     DEFAULT_FORMULA_REWRITE_MODEL,
     FORMULA_REWRITE_MODEL_CLASSES,
     read_query_from_terminal,
+    release_query_rewrite_worker,
     rewrite_query_views,
     spawn_query_rewrite_warmup,
 )
@@ -357,6 +357,7 @@ class HybridSearcher:
         self.grade = grade
         self.book_id = book_id
         self.logger = logger
+        self._prepared_rewrites: dict[str, list[tuple[dict[str, object], float]]] = {}
 
         if logger is not None:
             logger.info("Original query view: %s", "bật" if original_query else "tắt")
@@ -405,47 +406,67 @@ class HybridSearcher:
         if logger is not None:
             logger.info("Hybrid search đã sẵn sàng")
 
-    def warmup_modal_models_concurrently(self) -> bool:
-        """Load rewrite and rerank models concurrently when both are enabled."""
-        rewrite_enabled = self.formula_rewrite_enabled or self.method_rewrite_enabled
-        if not rewrite_enabled or not self.rerank_enabled:
+    def warmup_rewrite_model(self) -> bool:
+        """Load only the rewrite worker before the rewrite batch phase."""
+        if not (self.formula_rewrite_enabled or self.method_rewrite_enabled):
             return False
-        spawn_rerank_warmup = getattr(self.rerank_backend, "spawn_warmup", None)
-        if not callable(spawn_rerank_warmup):
-            raise RuntimeError("Configured rerank backend does not support Modal warmup")
-
-        try:
-            import modal
-        except ImportError as error:
-            raise RuntimeError(
-                "Missing dependency 'modal'. Install ai-engine/rag/requirements.txt first."
-            ) from error
-
-        if self.logger is not None:
-            self.logger.info("Đang khởi động đồng thời model rewrite và rerank trên Modal")
-        started_at = perf_counter()
-        show_modal_logs = self.formula_rewrite_modal_logs or bool(
-            getattr(self.rerank_backend, "show_modal_logs", False)
+        call = spawn_query_rewrite_warmup(
+            app_name=self.formula_rewrite_app_name,
+            class_name=self.formula_rewrite_class_name,
+            model=self.formula_rewrite_model,
         )
-        output_context = modal.enable_output() if show_modal_logs else nullcontext()
-        with output_context:
-            rewrite_call = spawn_query_rewrite_warmup(
+        result = call.get()
+        if self.logger is not None:
+            self.logger.info("Rewrite model đã sẵn sàng: %s", result)
+        return True
+
+    def release_rewrite_model(self) -> bool:
+        """Release rewrite VRAM before the rerank phase starts."""
+        if not (self.formula_rewrite_enabled or self.method_rewrite_enabled):
+            return False
+        result = release_query_rewrite_worker(
+            app_name=self.formula_rewrite_app_name,
+            class_name=self.formula_rewrite_class_name,
+            model=self.formula_rewrite_model,
+        )
+        if self.logger is not None:
+            self.logger.info("Rewrite model đã giải phóng: %s", result)
+        return True
+
+    def warmup_rerank_model(self) -> bool:
+        """Load only the reranker after rewrite VRAM has been released."""
+        if not self.rerank_enabled:
+            return False
+        spawn_warmup = getattr(self.rerank_backend, "spawn_warmup", None)
+        if not callable(spawn_warmup):
+            raise RuntimeError("Configured rerank backend does not support Modal warmup")
+        result = spawn_warmup().get()
+        if self.logger is not None:
+            self.logger.info("Rerank model đã sẵn sàng: %s", result)
+        return True
+
+    def prepare_rewrites(self, queries: list[str]) -> None:
+        """Create and retain rewrite outputs for the entire batch before retrieval."""
+        if not (self.formula_rewrite_enabled or self.method_rewrite_enabled):
+            return
+        for query in queries:
+            if not query.strip():
+                raise ValueError("query must not be empty")
+            started_at = perf_counter()
+            result = rewrite_query_views(
+                query,
+                formula_rewrite=self.formula_rewrite_enabled,
+                method_rewrite=self.method_rewrite_enabled,
                 app_name=self.formula_rewrite_app_name,
                 class_name=self.formula_rewrite_class_name,
                 model=self.formula_rewrite_model,
+                show_modal_logs=self.formula_rewrite_modal_logs,
             )
-            rerank_call = spawn_rerank_warmup()
-            rewrite_result = rewrite_call.get()
-            rerank_result = rerank_call.get()
-
-        if self.logger is not None:
-            self.logger.info(
-                "Hai model Modal đã sẵn sàng trong %.2fs: rewrite=%s, rerank=%s",
-                perf_counter() - started_at,
-                rewrite_result.get("model") if isinstance(rewrite_result, dict) else "ready",
-                rerank_result.get("model") if isinstance(rerank_result, dict) else "ready",
+            if not isinstance(result, dict):
+                raise ValueError("Modal rewrite response must be an object")
+            self._prepared_rewrites.setdefault(query, []).append(
+                (result, perf_counter() - started_at)
             )
-        return True
 
     @staticmethod
     def _notify(
@@ -487,21 +508,30 @@ class HybridSearcher:
 
         rewrite_enabled = self.formula_rewrite_enabled or self.method_rewrite_enabled
         if rewrite_enabled:
-            if self.formula_rewrite_enabled:
+            prepared = self._prepared_rewrites.get(original_query, [])
+            prepared_rewrite = bool(prepared)
+            if prepared_rewrite:
+                rewrite_result, query_rewrite_seconds = prepared.pop(0)
+                if not prepared:
+                    del self._prepared_rewrites[original_query]
+            if self.formula_rewrite_enabled and not prepared_rewrite:
                 self._notify(progress_callback, "formula_rewrite_started")
-            if self.method_rewrite_enabled:
+            if self.method_rewrite_enabled and not prepared_rewrite:
                 self._notify(progress_callback, "method_rewrite_started")
-            rewrite_started_at = perf_counter()
-            rewrite_result = rewrite_query_views(
-                original_query,
-                formula_rewrite=self.formula_rewrite_enabled,
-                method_rewrite=self.method_rewrite_enabled,
-                app_name=self.formula_rewrite_app_name,
-                class_name=self.formula_rewrite_class_name,
-                model=self.formula_rewrite_model,
-                show_modal_logs=self.formula_rewrite_modal_logs,
-            )
-            query_rewrite_seconds = perf_counter() - rewrite_started_at
+            if not prepared_rewrite:
+                rewrite_started_at = perf_counter()
+                rewrite_result = rewrite_query_views(
+                    original_query,
+                    formula_rewrite=self.formula_rewrite_enabled,
+                    method_rewrite=self.method_rewrite_enabled,
+                    app_name=self.formula_rewrite_app_name,
+                    class_name=self.formula_rewrite_class_name,
+                    model=self.formula_rewrite_model,
+                    show_modal_logs=self.formula_rewrite_modal_logs,
+                )
+                query_rewrite_seconds = perf_counter() - rewrite_started_at
+            if not isinstance(rewrite_result, dict):
+                raise ValueError("Modal rewrite response must be an object")
             rewrite_timings = rewrite_result.get("rewrite_timings_seconds", {})
             if isinstance(rewrite_timings, dict):
                 formula_rewrite_seconds = float(rewrite_timings.get("formula", 0.0))
@@ -535,9 +565,9 @@ class HybridSearcher:
                 rewrite_result.get("method_used_fallback", False)
             )
             method_fallback_reason = rewrite_result.get("method_fallback_reason")
-            if self.formula_rewrite_enabled:
+            if self.formula_rewrite_enabled and not prepared_rewrite:
                 self._notify(progress_callback, "formula_rewrite_completed")
-            if self.method_rewrite_enabled:
+            if self.method_rewrite_enabled and not prepared_rewrite:
                 self._notify(progress_callback, "method_rewrite_completed")
 
         rerank_query_selection = select_rerank_query(
@@ -733,7 +763,7 @@ def main() -> None:
         "--formula-rewrite-model",
         choices=FORMULA_REWRITE_MODEL_CLASSES,
         default=DEFAULT_FORMULA_REWRITE_MODEL,
-        help="Modal formula/method rewrite model; default: qwen3-14b-awq",
+        help="Modal formula/method rewrite model; default: qwen3-4b",
     )
     parser.add_argument(
         "--formula-rewrite-class-name",

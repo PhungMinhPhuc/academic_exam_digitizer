@@ -1,22 +1,23 @@
-# AI Engine
+# Python local runtime
 ai-engine/.env
-ai-engine/extracted_images/
-ai-engine/__pycache__/
 ai-engine/venv/
-*.json
-ai-engine/core/__pycache__
+ai-engine/.venv/
+__pycache__/
+*.py[cod]
+
+# Generated digitization and RAG output
+ai-engine/extracted_images/
+extracted_images/
 ai-engine/rag/artifacts/
+test/result_*.json
+test/*_debug.json
+test_sample/
+
+# Local source assets and model weights
+data/pdfs/
+*.pt
 
 # Java Backend
 backend/target/
 backend/.idea/
 .DS_Store
-
-# Others
-*.txt
-!ai-engine/prompts/*.txt
-test_sample/
-extracted_images/
-
-# Models
-*.pt

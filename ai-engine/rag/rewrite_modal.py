@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import gc
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -20,9 +21,7 @@ import modal
 
 
 APP_NAME = "exam-rag-qwen3-rewrite"
-CLASS_NAME = "Qwen3Rewriter"
 CLASS_NAME_4B = "Qwen3Rewriter4B"
-MODEL_NAME = "Qwen/Qwen3-14B-AWQ"
 MODEL_NAME_4B = "Qwen/Qwen3-4B"
 MODEL_CACHE_PATH = "/models/huggingface"
 MAX_INPUT_CHARS = 5_000
@@ -222,14 +221,10 @@ TAXONOMY_LABEL_RE = re.compile(
 )
 
 app = modal.App(APP_NAME)
-model_cache = modal.Volume.from_name(
-    "exam-rag-qwen3-14b-awq-cache", create_if_missing=True
-)
 model_cache_4b = modal.Volume.from_name(
     "exam-rag-qwen3-4b-cache", create_if_missing=True
 )
 
-# Qwen3-14B-AWQ is an official 4-bit Qwen release and runs on stable vLLM.
 # Keep inference dependencies isolated in the Modal image.
 image = (
     modal.Image.from_registry(
@@ -408,7 +403,7 @@ def _replace_latex_expressions_in_order(
 def _normalise_formula_response(
     question: str,
     raw_text: str,
-    model_name: str = MODEL_NAME,
+    model_name: str = MODEL_NAME_4B,
 ) -> dict[str, Any]:
     formula_matches = _formula_matches(question)
     if not formula_matches:
@@ -494,7 +489,7 @@ def _validated_method_text(
 
 def _normalise_method_response(
     raw_text: str,
-    model_name: str = MODEL_NAME,
+    model_name: str = MODEL_NAME_4B,
 ) -> dict[str, Any]:
     try:
         payload = _extract_json(raw_text)
@@ -781,39 +776,23 @@ def _rewrite_with_worker(
     return result
 
 
-@app.cls(
-    image=image,
-    gpu="L4",
-    timeout=10 * 60,
-    scaledown_window=120,
-    volumes={"/models": model_cache},
-)
-class Qwen3Rewriter:
-    """Single-L4 Qwen3-14B-AWQ worker for short rewrite requests."""
+def _release_worker(worker: Any) -> dict[str, str]:
+    """Discard vLLM state so a single GPU can load the reranker next."""
+    llm = getattr(worker, "llm", None)
+    if llm is not None:
+        engine = getattr(llm, "llm_engine", None)
+        shutdown = getattr(engine, "shutdown", None)
+        if callable(shutdown):
+            shutdown()
+        del worker.llm
+    if hasattr(worker, "tokenizer"):
+        del worker.tokenizer
+    gc.collect()
+    import torch
 
-    @modal.enter()
-    def load_model(self) -> None:
-        _load_worker(self, MODEL_NAME, quantization="awq")
-        model_cache.commit()
-
-    @modal.method()
-    def warmup(self) -> dict[str, str]:
-        _worker_log("warmup_completed", model=self.model_name)
-        return {"model": self.model_name, "status": "ready"}
-
-    @modal.method()
-    def rewrite(
-        self,
-        question: str,
-        formula_rewrite: bool = True,
-        method_rewrite: bool = False,
-    ) -> dict[str, Any]:
-        return _rewrite_with_worker(
-            self,
-            question,
-            formula_rewrite=formula_rewrite,
-            method_rewrite=method_rewrite,
-        )
+    torch.cuda.empty_cache()
+    _worker_log("model_released", model=getattr(worker, "model_name", MODEL_NAME_4B))
+    return {"model": getattr(worker, "model_name", MODEL_NAME_4B), "status": "released"}
 
 
 @app.cls(
@@ -826,15 +805,25 @@ class Qwen3Rewriter:
 class Qwen3Rewriter4B:
     """Single-L4 Qwen3-4B worker for lower-latency rewrite requests."""
 
-    @modal.enter()
-    def load_model(self) -> None:
+    def _ensure_model(self) -> None:
+        if hasattr(self, "llm"):
+            return
         _load_worker(self, MODEL_NAME_4B, quantization=None)
         model_cache_4b.commit()
 
+    @modal.enter()
+    def load_model(self) -> None:
+        self._ensure_model()
+
     @modal.method()
     def warmup(self) -> dict[str, str]:
+        self._ensure_model()
         _worker_log("warmup_completed", model=self.model_name)
         return {"model": self.model_name, "status": "ready"}
+
+    @modal.method()
+    def release(self) -> dict[str, str]:
+        return _release_worker(self)
 
     @modal.method()
     def rewrite(
@@ -843,6 +832,7 @@ class Qwen3Rewriter4B:
         formula_rewrite: bool = True,
         method_rewrite: bool = False,
     ) -> dict[str, Any]:
+        self._ensure_model()
         return _rewrite_with_worker(
             self,
             question,

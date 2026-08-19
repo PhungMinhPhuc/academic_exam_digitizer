@@ -117,6 +117,28 @@ class RewriteModalContractTest(unittest.TestCase):
 
         self.assertIs(call, expected_call)
 
+    def test_client_releases_selected_rewrite_worker(self) -> None:
+        from .rewrite import release_query_rewrite_worker
+
+        class _ReleaseMethod:
+            def remote(self):
+                return {"status": "released"}
+
+        class _RemoteWorker:
+            release = _ReleaseMethod()
+
+        class _RemoteClass:
+            @classmethod
+            def from_name(cls, app_name: str, class_name: str):
+                self.assertEqual(app_name, "exam-rag-qwen3-rewrite")
+                self.assertEqual(class_name, "Qwen3Rewriter4B")
+                return _RemoteWorker
+
+        with patch.dict(sys.modules, {"modal": types.SimpleNamespace(Cls=_RemoteClass)}):
+            result = release_query_rewrite_worker()
+
+        self.assertEqual(result, {"status": "released"})
+
     def test_client_streams_modal_output_when_requested(self) -> None:
         events: list[object] = []
 
@@ -173,8 +195,10 @@ class RewriteModalContractTest(unittest.TestCase):
             DEFAULT_FORMULA_REWRITE_CLASS_NAME,
         )
         self.assertEqual(
-            formula_rewrite_class_name("qwen3-4b"), "Qwen3Rewriter4B"
+            formula_rewrite_class_name("qwen3-4b"), DEFAULT_FORMULA_REWRITE_CLASS_NAME
         )
+        with self.assertRaisesRegex(ValueError, "Unknown rewrite model"):
+            formula_rewrite_class_name("qwen3-14b-awq")
 
     def test_response_reports_the_selected_model(self) -> None:
         result = rewrite_modal._normalise_formula_response(

@@ -1,0 +1,6 @@
+pgvector>=0.3.6
+psycopg[binary]>=3.2
+numpy>=1.26
+sentence-transformers>=3.0
+bm25s>=0.3.10
+modal>=1.0

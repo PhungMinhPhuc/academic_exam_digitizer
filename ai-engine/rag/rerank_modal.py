@@ -10,6 +10,7 @@ The worker is called through the authenticated Modal SDK by ``rag.rerank``.
 from __future__ import annotations
 
 import json
+import gc
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -161,6 +162,18 @@ def _rerank_with_worker(
     return result
 
 
+def _release_worker(worker: Any) -> dict[str, str]:
+    """Discard cross-encoder state after a batch reranking phase."""
+    if hasattr(worker, "model"):
+        del worker.model
+    gc.collect()
+    import torch
+
+    torch.cuda.empty_cache()
+    _worker_log("model_released", model=getattr(worker, "model_name", "unknown"))
+    return {"model": getattr(worker, "model_name", "unknown"), "status": "released"}
+
+
 @app.cls(
     image=image,
     gpu="L4",
@@ -171,18 +184,29 @@ def _rerank_with_worker(
 class Qwen3Reranker06B:
     """Qwen3 0.6B worker implementing the shared rerank response contract."""
 
-    @modal.enter()
-    def load_model(self) -> None:
+    def _ensure_model(self) -> None:
+        if hasattr(self, "model"):
+            return
         _load_worker(self, MODEL_NAME_06B, BATCH_SIZE_06B)
         model_cache.commit()
 
+    @modal.enter()
+    def load_model(self) -> None:
+        self._ensure_model()
+
     @modal.method()
     def warmup(self) -> dict[str, str]:
+        self._ensure_model()
         _worker_log("warmup_completed", model=self.model_name)
         return {"model": self.model_name, "status": "ready"}
 
     @modal.method()
+    def release(self) -> dict[str, str]:
+        return _release_worker(self)
+
+    @modal.method()
     def rerank(self, query: str, documents: list[str]) -> dict[str, Any]:
+        self._ensure_model()
         return _rerank_with_worker(self, query, documents)
 
 
@@ -196,16 +220,27 @@ class Qwen3Reranker06B:
 class Qwen3Reranker4B:
     """Qwen3 4B worker implementing the shared rerank response contract."""
 
-    @modal.enter()
-    def load_model(self) -> None:
+    def _ensure_model(self) -> None:
+        if hasattr(self, "model"):
+            return
         _load_worker(self, MODEL_NAME_4B, BATCH_SIZE_4B)
         model_cache.commit()
 
+    @modal.enter()
+    def load_model(self) -> None:
+        self._ensure_model()
+
     @modal.method()
     def warmup(self) -> dict[str, str]:
+        self._ensure_model()
         _worker_log("warmup_completed", model=self.model_name)
         return {"model": self.model_name, "status": "ready"}
 
     @modal.method()
+    def release(self) -> dict[str, str]:
+        return _release_worker(self)
+
+    @modal.method()
     def rerank(self, query: str, documents: list[str]) -> dict[str, Any]:
+        self._ensure_model()
         return _rerank_with_worker(self, query, documents)

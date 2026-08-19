@@ -106,7 +106,52 @@ class _FakeSearcher:
         }
 
 
+class _StagedFakeSearcher(_FakeSearcher):
+    def __init__(self) -> None:
+        self.events: list[object] = []
+
+    def warmup_rewrite_model(self) -> bool:
+        self.events.append("warmup-rewrite")
+        return True
+
+    def prepare_rewrites(self, queries: list[str]) -> None:
+        self.events.append(("rewrite", list(queries)))
+
+    def release_rewrite_model(self) -> bool:
+        self.events.append("release-rewrite")
+        return True
+
+    def warmup_rerank_model(self) -> bool:
+        self.events.append("warmup-rerank")
+        return True
+
+    def classify(self, query, **kwargs):
+        self.events.append(("classify", query))
+        return super().classify(query, **kwargs)
+
+
 class BatchClassificationTests(unittest.TestCase):
+    def test_batch_rewrites_every_query_before_loading_reranker(self) -> None:
+        queries = [
+            ParsedQuery("Câu 1. Nội dung", "1", "I"),
+            ParsedQuery("Câu 2. Nội dung", "2", "I"),
+        ]
+        searcher = _StagedFakeSearcher()
+
+        classify_queries(queries, searcher, warmup_modal=True)
+
+        self.assertEqual(
+            searcher.events,
+            [
+                "warmup-rewrite",
+                ("rewrite", [query.question for query in queries]),
+                "release-rewrite",
+                "warmup-rerank",
+                ("classify", queries[0].question),
+                ("classify", queries[1].question),
+            ],
+        )
+
     def test_batch_logs_progress_and_writes_minimal_utf8_records(self) -> None:
         queries = [
             ParsedQuery("Câu 1. Nội dung tiếng Việt", "1", "I"),
@@ -220,62 +265,6 @@ class HybridSearcherTests(unittest.TestCase):
         self.assertEqual(fused[0]["section_id"], "section-integral")
         self.assertEqual(fused[0]["query_ranks"]["original"]["vector_rank"], 3)
         self.assertEqual(fused[0]["query_ranks"]["method"]["bm25_rank"], 1)
-
-    @patch("rag.search.spawn_query_rewrite_warmup")
-    @patch("rag.search.PgVectorStore")
-    @patch("rag.search.Bm25SearchIndex")
-    @patch("rag.search.SentenceTransformer")
-    def test_rewrite_and_rerank_warmups_are_spawned_before_waiting(
-        self,
-        model_class: MagicMock,
-        bm25_class: MagicMock,
-        store_class: MagicMock,
-        rewrite_warmup: MagicMock,
-    ) -> None:
-        del model_class, bm25_class, store_class
-        events: list[str] = []
-
-        class _WarmupCall:
-            def __init__(self, name: str) -> None:
-                self.name = name
-
-            def get(self) -> dict[str, str]:
-                events.append(f"get-{self.name}")
-                return {"model": self.name}
-
-        class _WarmupBackend:
-            show_modal_logs = False
-
-            def spawn_warmup(self) -> _WarmupCall:
-                events.append("spawn-rerank")
-                return _WarmupCall("rerank")
-
-            def score(self, query, documents):
-                return [0.0] * len(documents)
-
-        def spawn_rewrite(**kwargs):
-            events.append("spawn-rewrite")
-            return _WarmupCall("rewrite")
-
-        rewrite_warmup.side_effect = spawn_rewrite
-        searcher = HybridSearcher(
-            "postgresql://example",
-            formula_rewrite=True,
-            rerank=True,
-            rerank_backend=_WarmupBackend(),
-            bm25_index=Path("bm25-test"),
-        )
-
-        self.assertTrue(searcher.warmup_modal_models_concurrently())
-        self.assertEqual(
-            events,
-            ["spawn-rewrite", "spawn-rerank", "get-rewrite", "get-rerank"],
-        )
-        rewrite_warmup.assert_called_once_with(
-            app_name="exam-rag-qwen3-rewrite",
-            class_name=None,
-            model="qwen3-14b-awq",
-        )
 
     @patch("rag.search.PgVectorStore")
     @patch("rag.search.Bm25SearchIndex")
@@ -417,6 +406,52 @@ class HybridSearcherTests(unittest.TestCase):
     @patch("rag.search.PgVectorStore")
     @patch("rag.search.Bm25SearchIndex")
     @patch("rag.search.SentenceTransformer")
+    def test_prepared_rewrite_is_reused_without_a_second_remote_call(
+        self,
+        model_class: MagicMock,
+        bm25_class: MagicMock,
+        store_class: MagicMock,
+        rewrite_mock: MagicMock,
+    ) -> None:
+        model_class.return_value.encode.return_value = np.zeros((1, 1024), dtype=np.float32)
+        store_class.return_value.vector_search.return_value = []
+        bm25_class.return_value.search.return_value = []
+        rewrite_mock.return_value = {
+            "formula_query": "khái niệm lượng giác",
+            "formula_concepts": [],
+            "formula_used_fallback": False,
+            "formula_fallback_reason": None,
+            "method_query": None,
+            "method_confidence": None,
+            "method_used_fallback": False,
+            "method_fallback_reason": None,
+        }
+        searcher = HybridSearcher(
+            "postgresql://example",
+            original_query=False,
+            formula_rewrite=True,
+            rerank=False,
+            bm25_index=Path("bm25-test"),
+        )
+        query = r"Câu 1. Cho $y=\sin x$"
+
+        searcher.prepare_rewrites([query])
+        searcher.classify(query)
+
+        rewrite_mock.assert_called_once_with(
+            query,
+            formula_rewrite=True,
+            method_rewrite=False,
+            app_name="exam-rag-qwen3-rewrite",
+            class_name=None,
+            model="qwen3-4b",
+            show_modal_logs=False,
+        )
+
+    @patch("rag.search.rewrite_query_views")
+    @patch("rag.search.PgVectorStore")
+    @patch("rag.search.Bm25SearchIndex")
+    @patch("rag.search.SentenceTransformer")
     def test_method_only_retrieves_without_original_or_formula_view(
         self,
         model_class: MagicMock,
@@ -463,7 +498,7 @@ class HybridSearcherTests(unittest.TestCase):
             method_rewrite=True,
             app_name="exam-rag-qwen3-rewrite",
             class_name=None,
-            model="qwen3-14b-awq",
+            model="qwen3-4b",
             show_modal_logs=False,
         )
 

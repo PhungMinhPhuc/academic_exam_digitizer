@@ -272,12 +272,34 @@ def classify_queries(
     complexity_estimator: ComplexityEstimator = default_complexity_estimator,
     debug_records: list[dict[str, Any]] | None = None,
     debug_candidate_count: int = 10,
+    warmup_modal: bool = False,
     logger: logging.Logger = LOGGER,
 ) -> list[dict[str, Any]]:
-    """Classify all parsed queries and return the minimal output records."""
+    """Rewrite the batch first, then retrieve and rerank its candidates."""
     results: list[dict[str, Any]] = []
     total = len(queries)
     batch_started_at = perf_counter()
+
+    prepare_rewrites = getattr(searcher, "prepare_rewrites", None)
+    release_rewrite_model = getattr(searcher, "release_rewrite_model", None)
+    warmup_rewrite_model = getattr(searcher, "warmup_rewrite_model", None)
+    warmup_rerank_model = getattr(searcher, "warmup_rerank_model", None)
+    if callable(prepare_rewrites):
+        try:
+            if warmup_modal and callable(warmup_rewrite_model):
+                logger.info("Pha rewrite | Đang nạp Qwen3-4B")
+                warmup_rewrite_model()
+            logger.info("Pha rewrite | Đang rewrite %d query", total)
+            prepare_rewrites([parsed.question for parsed in queries])
+            logger.info("Pha rewrite | Hoàn tất %d query", total)
+        finally:
+            if callable(release_rewrite_model):
+                logger.info("Pha rewrite | Đang giải phóng Qwen3-4B")
+                release_rewrite_model()
+
+    if warmup_modal and callable(warmup_rerank_model):
+        logger.info("Pha rerank | Đang nạp Qwen3-Reranker")
+        warmup_rerank_model()
 
     for index, parsed in enumerate(queries, start=1):
         prefix = f"[{index}/{total}] {parsed.label}"
@@ -425,7 +447,7 @@ def main() -> None:
         "--formula-rewrite-model",
         choices=FORMULA_REWRITE_MODEL_CLASSES,
         default=DEFAULT_FORMULA_REWRITE_MODEL,
-        help="Model formula/method rewrite trên Modal; mặc định: qwen3-14b-awq",
+        help="Model formula/method rewrite trên Modal; mặc định: qwen3-4b",
     )
     parser.add_argument(
         "--formula-rewrite-class-name",
@@ -479,7 +501,7 @@ def main() -> None:
         "--modal-warmup",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Khởi động đồng thời rewrite và rerank model (mặc định: bật)",
+        help="Warmup từng model ở đầu pha riêng (mặc định: bật)",
     )
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--device", default=None, help="cpu, cuda, hoặc bỏ qua để tự chọn")
@@ -575,12 +597,6 @@ def main() -> None:
             bm25_index=args.bm25_index,
             logger=LOGGER,
         )
-        if (
-            args.modal_warmup
-            and (args.formula_rewrite or args.method_rewrite)
-            and args.rerank
-        ):
-            searcher.warmup_modal_models_concurrently()
         debug_records: list[dict[str, Any]] | None = (
             [] if debug_output_path is not None else None
         )
@@ -589,6 +605,7 @@ def main() -> None:
             searcher,
             debug_records=debug_records,
             debug_candidate_count=args.debug_candidates,
+            warmup_modal=args.modal_warmup,
             logger=LOGGER,
         )
         write_results(output_path, results)

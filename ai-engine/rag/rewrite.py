@@ -2,7 +2,7 @@
 
 Example, from ``ai-engine`` after deploying ``rag/rewrite_modal.py``:
 
-    ..\\.venv\\Scripts\\python.exe -m rag.rewrite --formula-rewrite-model qwen3-4b
+    ..\\.venv\\Scripts\\python.exe -m rag.rewrite
 """
 
 from __future__ import annotations
@@ -12,11 +12,10 @@ import json
 
 
 DEFAULT_FORMULA_REWRITE_APP_NAME = "exam-rag-qwen3-rewrite"
-DEFAULT_FORMULA_REWRITE_CLASS_NAME = "Qwen3Rewriter"
-DEFAULT_FORMULA_REWRITE_MODEL = "qwen3-14b-awq"
+DEFAULT_FORMULA_REWRITE_CLASS_NAME = "Qwen3Rewriter4B"
+DEFAULT_FORMULA_REWRITE_MODEL = "qwen3-4b"
 FORMULA_REWRITE_MODEL_CLASSES = {
     DEFAULT_FORMULA_REWRITE_MODEL: DEFAULT_FORMULA_REWRITE_CLASS_NAME,
-    "qwen3-4b": "Qwen3Rewriter4B",
 }
 
 
@@ -104,6 +103,27 @@ def spawn_query_rewrite_warmup(
     selected_class_name = class_name or formula_rewrite_class_name(model)
     rewriter_class = modal.Cls.from_name(app_name, selected_class_name)
     return rewriter_class().warmup.spawn()
+
+
+def release_query_rewrite_worker(
+    app_name: str = DEFAULT_FORMULA_REWRITE_APP_NAME,
+    class_name: str | None = None,
+    model: str = DEFAULT_FORMULA_REWRITE_MODEL,
+) -> dict[str, object]:
+    """Release the selected worker's rewrite model after a batch phase."""
+    try:
+        import modal
+    except ImportError as error:
+        raise RuntimeError(
+            "Missing dependency 'modal'. Install ai-engine/rag/requirements.txt first."
+        ) from error
+
+    selected_class_name = class_name or formula_rewrite_class_name(model)
+    rewriter_class = modal.Cls.from_name(app_name, selected_class_name)
+    response = rewriter_class().release.remote()
+    if not isinstance(response, dict):
+        raise ValueError("Modal rewrite release response must be an object")
+    return response
 
 
 def main() -> None:

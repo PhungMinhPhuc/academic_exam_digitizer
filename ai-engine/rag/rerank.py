@@ -85,6 +85,21 @@ class ModalRerankBackend:
         reranker_class = modal.Cls.from_name(self.app_name, self.class_name)
         return reranker_class().warmup.spawn()
 
+    def release(self) -> dict[str, object]:
+        """Release the remote reranker model after the batch has finished."""
+        try:
+            import modal
+        except ImportError as error:
+            raise RuntimeError(
+                "Missing dependency 'modal'. Install ai-engine/rag/requirements.txt first."
+            ) from error
+
+        reranker_class = modal.Cls.from_name(self.app_name, self.class_name)
+        response = reranker_class().release.remote()
+        if not isinstance(response, dict):
+            raise ValueError("Modal reranker release response must be an object")
+        return response
+
 
 def _validated_scores(values: Sequence[Any], expected_count: int) -> list[float]:
     if len(values) != expected_count:
