@@ -27,6 +27,14 @@ from .rerank import (
     RerankBackend,
     rerank_candidates,
 )
+from .rerank_query import (
+    DEFAULT_RERANK_METHOD_MIN_CONFIDENCE,
+    DEFAULT_RERANK_QUERY_MODE,
+    RERANK_QUERY_MODES,
+    parse_query_context,
+    select_rerank_query,
+    validate_method_analysis,
+)
 from .rewrite import (
     DEFAULT_FORMULA_REWRITE_APP_NAME,
     DEFAULT_FORMULA_REWRITE_MODEL,
@@ -292,6 +300,8 @@ class HybridSearcher:
         formula_rewrite_modal_logs: bool = False,
         rerank: bool = True,
         rerank_k: int = DEFAULT_RERANK_K,
+        rerank_query_mode: str = DEFAULT_RERANK_QUERY_MODE,
+        rerank_method_min_confidence: float = DEFAULT_RERANK_METHOD_MIN_CONFIDENCE,
         rerank_app_name: str = DEFAULT_RERANK_APP_NAME,
         rerank_model: str = DEFAULT_RERANK_MODEL,
         rerank_class_name: str | None = None,
@@ -311,6 +321,12 @@ class HybridSearcher:
             raise ValueError("top_k, candidate_k, rrf_k, and rerank_k must be positive")
         if rerank_k > MAX_RERANK_K:
             raise ValueError(f"rerank_k must not exceed {MAX_RERANK_K}")
+        if rerank_query_mode not in RERANK_QUERY_MODES:
+            raise ValueError(
+                "rerank_query_mode must be one of: " + ", ".join(RERANK_QUERY_MODES)
+            )
+        if not 0.0 <= rerank_method_min_confidence <= 1.0:
+            raise ValueError("rerank_method_min_confidence must be within [0, 1]")
         if not original_query and not formula_rewrite and not method_rewrite:
             raise ValueError("enable original_query, formula_rewrite, or method_rewrite")
 
@@ -318,6 +334,8 @@ class HybridSearcher:
         self.candidate_k = candidate_k
         self.rrf_k = rrf_k
         self.rerank_k = rerank_k
+        self.rerank_query_mode = rerank_query_mode
+        self.rerank_method_min_confidence = rerank_method_min_confidence
         self.original_query_enabled = original_query
         self.formula_rewrite_enabled = formula_rewrite
         self.method_rewrite_enabled = method_rewrite
@@ -358,6 +376,11 @@ class HybridSearcher:
                     rerank_model,
                     rerank_class_name or "tự động",
                     rerank_modal_logs,
+                )
+                logger.info(
+                    "Rerank query: mode=%s, method_min_confidence=%.2f",
+                    rerank_query_mode,
+                    rerank_method_min_confidence,
                 )
             else:
                 logger.info("Rerank đang tắt")
@@ -446,12 +469,15 @@ class HybridSearcher:
 
         total_started_at = perf_counter()
         original_query = query
+        query_context = parse_query_context(original_query)
         rewrite_result: dict[str, object] | None = None
         formula_query: str | None = None
         formula_concepts: list[object] = []
         formula_used_fallback = False
         formula_fallback_reason: object | None = None
         method_query: str | None = None
+        method_analysis: dict[str, Any] | None = None
+        method_analysis_validation_reason: str | None = None
         method_confidence: float | None = None
         method_used_fallback = False
         method_fallback_reason: object | None = None
@@ -497,6 +523,11 @@ class HybridSearcher:
             returned_method_query = rewrite_result.get("method_query")
             if isinstance(returned_method_query, str) and returned_method_query.strip():
                 method_query = returned_method_query.strip()
+            returned_method_analysis = rewrite_result.get("method_analysis")
+            if returned_method_analysis is not None:
+                method_analysis, method_analysis_validation_reason = (
+                    validate_method_analysis(returned_method_analysis)
+                )
             returned_method_confidence = rewrite_result.get("method_confidence")
             if isinstance(returned_method_confidence, (int, float)):
                 method_confidence = float(returned_method_confidence)
@@ -508,6 +539,17 @@ class HybridSearcher:
                 self._notify(progress_callback, "formula_rewrite_completed")
             if self.method_rewrite_enabled:
                 self._notify(progress_callback, "method_rewrite_completed")
+
+        rerank_query_selection = select_rerank_query(
+            original_query=original_query,
+            context=query_context,
+            requested_mode=self.rerank_query_mode,
+            method_rewrite_enabled=self.method_rewrite_enabled,
+            method_analysis=method_analysis,
+            method_confidence=method_confidence,
+            method_used_fallback=method_used_fallback,
+            min_confidence=self.rerank_method_min_confidence,
+        )
 
         requested_query_views: dict[str, str] = {}
         if self.original_query_enabled:
@@ -573,7 +615,7 @@ class HybridSearcher:
             rerank_started_at = perf_counter()
             rerank_input = fused_sections[: self.rerank_k]
             reranked_sections = rerank_candidates(
-                original_query,
+                rerank_query_selection.query,
                 rerank_input,
                 self.rerank_backend,
             )
@@ -613,9 +655,17 @@ class HybridSearcher:
             "formula_fallback_reason": formula_fallback_reason,
             "method_rewrite_enabled": self.method_rewrite_enabled,
             "method_query": method_query,
+            "method_analysis": method_analysis,
+            "method_analysis_validation_reason": method_analysis_validation_reason,
             "method_confidence": method_confidence,
             "method_used_fallback": method_used_fallback,
             "method_fallback_reason": method_fallback_reason,
+            "query_context": query_context.as_debug_dict(),
+            "rerank_query_mode_requested": rerank_query_selection.requested_mode,
+            "rerank_query_mode_effective": rerank_query_selection.effective_mode,
+            "rerank_query": rerank_query_selection.query,
+            "rerank_query_used_fallback": rerank_query_selection.used_fallback,
+            "rerank_query_fallback_reason": rerank_query_selection.fallback_reason,
             "query_views": query_views,
             "retrieval_runs": {
                 view_name: {
@@ -709,6 +759,18 @@ def main() -> None:
         help="RRF candidates sent to reranker; default: 10",
     )
     parser.add_argument(
+        "--rerank-query-mode",
+        choices=RERANK_QUERY_MODES,
+        default=DEFAULT_RERANK_QUERY_MODE,
+        help="Query supplied to reranker; default: original",
+    )
+    parser.add_argument(
+        "--rerank-method-min-confidence",
+        type=float,
+        default=DEFAULT_RERANK_METHOD_MIN_CONFIDENCE,
+        help="Structured mode falls back below this method confidence; default: 0.7",
+    )
+    parser.add_argument(
         "--rerank-app-name",
         default=DEFAULT_RERANK_APP_NAME,
         help="Modal app name for --rerank",
@@ -761,6 +823,8 @@ def main() -> None:
         parser.error("--top-k, --candidate-k, --rrf-k, and --rerank-k must be positive")
     if args.rerank_k > MAX_RERANK_K:
         parser.error(f"--rerank-k must not exceed {MAX_RERANK_K}")
+    if not 0.0 <= args.rerank_method_min_confidence <= 1.0:
+        parser.error("--rerank-method-min-confidence must be within [0, 1]")
 
     try:
         original_query = read_query_from_terminal()
@@ -782,6 +846,8 @@ def main() -> None:
             formula_rewrite_modal_logs=args.formula_rewrite_modal_logs,
             rerank=args.rerank,
             rerank_k=args.rerank_k,
+            rerank_query_mode=args.rerank_query_mode,
+            rerank_method_min_confidence=args.rerank_method_min_confidence,
             rerank_app_name=args.rerank_app_name,
             rerank_model=args.rerank_model,
             rerank_class_name=args.rerank_class_name,

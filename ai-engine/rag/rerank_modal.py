@@ -28,9 +28,11 @@ MAX_SEQUENCE_LENGTH = 4_096
 BATCH_SIZE_06B = 16
 BATCH_SIZE_4B = 4
 RERANK_INSTRUCTION = (
-    "Given a Vietnamese high-school exam question, rank textbook sections by how "
-    "directly they identify the subject, grade, chapter, and lesson knowledge required "
-    "to solve it, preserving mathematical and LaTeX meaning."
+    "Given a Vietnamese high-school exam subquestion or its structured analysis, "
+    "rank candidate curriculum sections by whether they provide the direct knowledge "
+    "or operation required to solve it. Prefer the required direction of transformation "
+    "and solution method over passages that merely mention the same quantities, "
+    "formulas, or real-world context. Score only the supplied candidate document."
 )
 
 app = modal.App(APP_NAME)

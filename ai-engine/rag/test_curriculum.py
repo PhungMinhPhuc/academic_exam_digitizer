@@ -66,8 +66,8 @@ class CurriculumResolverTests(unittest.TestCase):
             select_best_lesson([result]),
             {
                 "Grade": 12,
-                "Chapter": "Ứng dụng đạo hàm để khảo sát và vẽ đồ thị hàm số",
-                "Lesson": "Tính đơn điệu và cực trị của hàm số",
+                "Chapter": "Chương 1. Ứng dụng đạo hàm để khảo sát và vẽ đồ thị hàm số",
+                "Lesson": "Bài 1. Tính đơn điệu và cực trị của hàm số",
                 "Complexity": None,
             },
         )

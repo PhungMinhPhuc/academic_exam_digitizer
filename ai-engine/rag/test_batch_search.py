@@ -352,12 +352,12 @@ class HybridSearcherTests(unittest.TestCase):
             debug_candidate_count=10,
         )
 
-        self.assertEqual(debug["classification"]["Lesson"], "Nguyên hàm")
+        self.assertEqual(debug["classification"]["Lesson"], "Bài 11. Nguyên hàm")
         self.assertEqual(debug["candidate_count"], 10)
         self.assertEqual(len(debug["candidates"]), 10)
         self.assertEqual(debug["candidates"][0]["rank"], 1)
         self.assertEqual(debug["candidates"][-1]["rank"], 10)
-        self.assertEqual(debug["candidates"][0]["Lesson"], "Nguyên hàm")
+        self.assertEqual(debug["candidates"][0]["Lesson"], "Bài 11. Nguyên hàm")
         grouped_sections = debug["results"]["Toán"]["12"][
             "Chương 4. Nguyên hàm và tích phân"
         ]["Bài 11. Nguyên hàm"]["sections"]
@@ -571,6 +571,90 @@ class HybridSearcherTests(unittest.TestCase):
         selected = select_mock.call_args.args[0]
         self.assertEqual(len(selected), 1)
         self.assertEqual(selected[0]["section_id"], "section-10")
+
+    @patch("rag.search.rewrite_query_views")
+    @patch("rag.search.PgVectorStore")
+    @patch("rag.search.Bm25SearchIndex")
+    @patch("rag.search.SentenceTransformer")
+    def test_structured_mode_reranks_with_focus_and_method_analysis(
+        self,
+        model_class: MagicMock,
+        bm25_class: MagicMock,
+        store_class: MagicMock,
+        rewrite_mock: MagicMock,
+    ) -> None:
+        model_class.return_value.encode.return_value = np.zeros(
+            (1, 1024), dtype=np.float32
+        )
+        store_class.return_value.vector_search.return_value = [
+            {
+                "book_id": "book",
+                "section_id": f"section-{index}",
+                "content": f"Tài liệu thứ {index}",
+                "metadata": {},
+                "vector_rank": index,
+                "cosine_similarity": 1.0 - index / 100,
+            }
+            for index in range(1, 13)
+        ]
+        bm25_class.return_value.search.return_value = []
+        rewrite_mock.return_value = {
+            "formula_query": None,
+            "formula_concepts": [],
+            "formula_used_fallback": False,
+            "formula_fallback_reason": None,
+            "method_query": "tích phân gia tốc để tìm vận tốc",
+            "method_analysis": {
+                "relevant_givens": [
+                    "vận tốc ban đầu",
+                    "gia tốc tầng một là hàm theo thời gian",
+                ],
+                "target": "vận tốc tại thời điểm ba mươi giây",
+                "transformation": "từ gia tốc suy ra độ biến thiên vận tốc",
+                "method": "tích phân xác định của gia tốc",
+            },
+            "method_confidence": 0.9,
+            "method_used_fallback": False,
+            "method_fallback_reason": None,
+        }
+        backend = MagicMock()
+        original_query = (
+            "Câu 3. Gia tốc tầng hai không liên quan.\n"
+            "a) Vận tốc tại thời điểm 30 giây là 1400 m/s."
+        )
+
+        with (
+            patch("rag.search.rerank_candidates") as rerank_mock,
+            patch("rag.search.select_best_lesson") as select_mock,
+        ):
+            rerank_mock.side_effect = (
+                lambda query, candidates, selected_backend: list(candidates)
+            )
+            select_mock.return_value = {
+                "Grade": None,
+                "Chapter": None,
+                "Lesson": None,
+                "Complexity": None,
+            }
+            searcher = HybridSearcher(
+                "postgresql://example",
+                top_k=1,
+                original_query=False,
+                formula_rewrite=False,
+                method_rewrite=True,
+                rerank=True,
+                rerank_query_mode="structured",
+                rerank_backend=backend,
+                bm25_index=Path("bm25-test"),
+            )
+            debug = searcher.classify(original_query, debug=True)
+
+        rerank_query = rerank_mock.call_args.args[0]
+        self.assertIn("a) Vận tốc tại thời điểm 30 giây", rerank_query)
+        self.assertIn("tích phân xác định của gia tốc", rerank_query)
+        self.assertNotIn("Gia tốc tầng hai không liên quan", rerank_query)
+        self.assertEqual(debug["rerank_query_mode_effective"], "structured")
+        self.assertFalse(debug["rerank_query_used_fallback"])
 
 
 if __name__ == "__main__":

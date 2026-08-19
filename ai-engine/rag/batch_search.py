@@ -18,6 +18,12 @@ from .rerank import (
     DEFAULT_RERANK_MODEL,
     RERANK_MODEL_CLASSES,
 )
+from .rerank_query import (
+    DEFAULT_RERANK_METHOD_MIN_CONFIDENCE,
+    DEFAULT_RERANK_QUERY_MODE,
+    PART_PATTERN,
+    RERANK_QUERY_MODES,
+)
 from .rewrite import (
     DEFAULT_FORMULA_REWRITE_APP_NAME,
     DEFAULT_FORMULA_REWRITE_MODEL,
@@ -48,7 +54,7 @@ class ExamParserConfig:
     question_pattern: Pattern[str] = re.compile(
         r"^\s*Câu\s+(?P<number>\d+)\s*\.", re.IGNORECASE
     )
-    part_pattern: Pattern[str] = re.compile(r"^\s*(?P<part>[a-z])\s*\)")
+    part_pattern: Pattern[str] = PART_PATTERN
     option_line_pattern: Pattern[str] = re.compile(r"^\s*A\s*[.)]")
     inline_option_pattern: Pattern[str] = re.compile(
         r"(?:\t+| {2,})A\s*[.)]"
@@ -439,6 +445,18 @@ def main() -> None:
         help="Rerank candidates qua Modal (mặc định: bật)",
     )
     parser.add_argument("--rerank-k", type=int, default=DEFAULT_RERANK_K)
+    parser.add_argument(
+        "--rerank-query-mode",
+        choices=RERANK_QUERY_MODES,
+        default=DEFAULT_RERANK_QUERY_MODE,
+        help="Query dùng để rerank; mặc định: original",
+    )
+    parser.add_argument(
+        "--rerank-method-min-confidence",
+        type=float,
+        default=DEFAULT_RERANK_METHOD_MIN_CONFIDENCE,
+        help="Structured mode fallback dưới confidence này; mặc định: 0.7",
+    )
     parser.add_argument("--rerank-app-name", default=DEFAULT_RERANK_APP_NAME)
     parser.add_argument(
         "--rerank-model",
@@ -497,6 +515,8 @@ def main() -> None:
         )
     if args.rerank_k > MAX_RERANK_K:
         parser.error(f"--rerank-k must not exceed {MAX_RERANK_K}")
+    if not 0.0 <= args.rerank_method_min_confidence <= 1.0:
+        parser.error("--rerank-method-min-confidence must be within [0, 1]")
 
     configure_console_logging()
     try:
@@ -541,6 +561,8 @@ def main() -> None:
             formula_rewrite_modal_logs=args.formula_rewrite_modal_logs,
             rerank=args.rerank,
             rerank_k=args.rerank_k,
+            rerank_query_mode=args.rerank_query_mode,
+            rerank_method_min_confidence=args.rerank_method_min_confidence,
             rerank_app_name=args.rerank_app_name,
             rerank_model=args.rerank_model,
             rerank_class_name=args.rerank_class_name,

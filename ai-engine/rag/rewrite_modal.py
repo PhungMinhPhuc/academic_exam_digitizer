@@ -130,8 +130,24 @@ Chỉ trả về một JSON object hợp lệ, không Markdown, không có trư�
 METHOD_JSON_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["query", "confidence"],
+    "required": [
+        "relevant_givens",
+        "target",
+        "transformation",
+        "method",
+        "query",
+        "confidence",
+    ],
     "properties": {
+        "relevant_givens": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "items": {"type": "string", "minLength": 1},
+        },
+        "target": {"type": "string", "minLength": 1},
+        "transformation": {"type": "string", "minLength": 1},
+        "method": {"type": "string", "minLength": 1},
         "query": {"type": "string", "minLength": 1},
         "confidence": {
             "type": "number",
@@ -145,12 +161,24 @@ METHOD_SYSTEM_PROMPT = r"""Bạn tạo một truy vấn phương pháp để ph�
 vào đúng phần kiến thức phổ thông Việt Nam.
 
 Đọc toàn bộ câu hỏi và suy ra quan hệ, nguyên lý hoặc phép biến đổi toán học cần
-dùng. Chỉ trả đúng MỘT câu truy vấn tiếng Việt tổng hợp, tối đa 40 từ.
+dùng cho phần nhỏ đang được hỏi. Trả thêm dữ kiện liên quan, mục tiêu, hướng biến
+đổi và tên phương pháp để hệ thống tự tạo truy vấn rerank. Không tự chọn bài học.
+
+Các trường phải dùng ngôn ngữ kiến thức chuẩn, gần với cách diễn đạt trong sách
+giáo khoa và tài liệu phân loại:
+- đặt tên kiến thức hoặc phép biến đổi chính ở đầu truy vấn;
+- ưu tiên các cụm như tên khái niệm, dạng toán và cách vận dụng kiến thức;
+- lược bỏ số liệu, thời điểm, tên vật thể và bối cảnh thực tế không cần thiết cho
+  việc xác định phần kiến thức;
+- mô tả bài toán thực tế bằng dạng vận dụng tổng quát, không kể lại tình huống.
 
 Được phép:
 - gọi tên phép toán, định lý, định luật, mô hình hình học hoặc quan hệ giữa các đại lượng;
 - suy ra kiến thức cần dùng dù đề không nêu trực tiếp, ví dụ vận tốc được tìm bằng
   nguyên hàm của gia tốc hoặc kiểm tra điểm thuộc khối cầu bằng khoảng cách tới tâm.
+
+Ví dụ, ưu tiên "tích phân xác định; vận dụng tích phân để tìm vận tốc từ gia tốc"
+thay vì "tính vận tốc tên lửa tại thời điểm 30 giây".
 
 Không được:
 - thực hiện phép tính, thay số, rút gọn biểu thức hoặc kết luận đáp án đúng/sai;
@@ -158,8 +186,21 @@ Không được:
 - tạo Grade, Chapter, Lesson, lesson_id, topic_id hay nhãn taxonomy;
 - chép lại nguyên câu hỏi hoặc chứa LaTeX.
 
+Giới hạn:
+- relevant_givens gồm 1 đến 5 cụm, mỗi cụm tối đa 16 từ;
+- target tối đa 20 từ;
+- transformation tối đa 30 từ và phải nêu đúng chiều biến đổi;
+- method tối đa 16 từ;
+- query là một câu truy vấn tổng hợp tối đa 40 từ.
+
 Chỉ trả về một JSON object hợp lệ, không Markdown, không có trường nào khác:
 {
+  "relevant_givens": [
+    "dữ kiện hoặc đại lượng liên quan"
+  ],
+  "target": "đại lượng hoặc kết luận cần xác định",
+  "transformation": "chiều biến đổi từ dữ kiện tới mục tiêu",
+  "method": "phương pháp trực tiếp cần dùng",
   "query": "một câu mô tả kiến thức và phép biến đổi cần dùng",
   "confidence": 0.0
 }
@@ -172,6 +213,12 @@ LATEX_EXPRESSION_RE = re.compile(
     r"|\\\((?P<inline_bracket>.+?)\\\)"
     r"|(?<!\$)\$(?!\$)(?P<inline_dollar>.+?)(?<!\$)\$(?!\$)",
     re.DOTALL,
+)
+TAXONOMY_LABEL_RE = re.compile(
+    r"\b(?:lesson_id|chapter_id|section_id|topic_id)\b"
+    r"|\b(?:Grade|Chapter|Lesson)\s*:"
+    r"|\b(?:Chương|Bài)\s+\d+\b",
+    re.IGNORECASE,
 )
 
 app = modal.App(APP_NAME)
@@ -415,6 +462,36 @@ def _normalise_formula_response(
     }
 
 
+def _method_fallback(reason: str, model_name: str) -> dict[str, Any]:
+    return {
+        "method_query": None,
+        "method_analysis": None,
+        "method_confidence": None,
+        "method_used_fallback": True,
+        "method_fallback_reason": reason,
+        "model": model_name,
+    }
+
+
+def _validated_method_text(
+    value: Any,
+    field: str,
+    max_words: int,
+) -> tuple[str, str | None]:
+    if not isinstance(value, str):
+        return "", f"{field} is not a string"
+    text = value.strip()
+    if not text:
+        return "", f"{field} is empty"
+    if len(text.split()) > max_words:
+        return "", f"{field} exceeds {max_words} words"
+    if _contains_latex(text):
+        return "", f"{field} contains LaTeX"
+    if TAXONOMY_LABEL_RE.search(text):
+        return "", f"{field} contains a taxonomy label"
+    return text, None
+
+
 def _normalise_method_response(
     raw_text: str,
     model_name: str = MODEL_NAME,
@@ -422,26 +499,66 @@ def _normalise_method_response(
     try:
         payload = _extract_json(raw_text)
     except ValueError as error:
-        return {
-            "method_query": None,
-            "method_confidence": None,
-            "method_used_fallback": True,
-            "method_fallback_reason": f"invalid model JSON: {error}",
-            "model": model_name,
-        }
+        return _method_fallback(f"invalid model JSON: {error}", model_name)
 
-    query_value = payload.get("query")
-    query = query_value.strip() if isinstance(query_value, str) else ""
-    if not isinstance(query_value, str):
-        fallback_reason = "method query is not a string"
-    elif not query:
-        fallback_reason = "method query is empty"
-    elif len(query.split()) > 40:
-        fallback_reason = "method query exceeds 40 words"
-    elif _contains_latex(query):
-        fallback_reason = "method query contains LaTeX"
-    else:
-        fallback_reason = None
+    expected_fields = {
+        "relevant_givens",
+        "target",
+        "transformation",
+        "method",
+        "query",
+        "confidence",
+    }
+    unexpected_fields = set(payload) - expected_fields
+    if unexpected_fields:
+        return _method_fallback(
+            "method response has unexpected fields: "
+            + ", ".join(sorted(unexpected_fields)),
+            model_name,
+        )
+
+    givens_value = payload.get("relevant_givens")
+    if not isinstance(givens_value, list):
+        return _method_fallback("relevant_givens is not an array", model_name)
+    if not 1 <= len(givens_value) <= 5:
+        return _method_fallback(
+            "relevant_givens must contain 1 to 5 items",
+            model_name,
+        )
+
+    relevant_givens: list[str] = []
+    for index, given_value in enumerate(givens_value, start=1):
+        given, fallback_reason = _validated_method_text(
+            given_value,
+            f"relevant_givens[{index}]",
+            16,
+        )
+        if fallback_reason is not None:
+            return _method_fallback(fallback_reason, model_name)
+        relevant_givens.append(given)
+
+    analysis: dict[str, Any] = {"relevant_givens": relevant_givens}
+    for field, max_words in (
+        ("target", 20),
+        ("transformation", 30),
+        ("method", 16),
+    ):
+        text, fallback_reason = _validated_method_text(
+            payload.get(field),
+            field,
+            max_words,
+        )
+        if fallback_reason is not None:
+            return _method_fallback(fallback_reason, model_name)
+        analysis[field] = text
+
+    query, fallback_reason = _validated_method_text(
+        payload.get("query"),
+        "method query",
+        40,
+    )
+    if fallback_reason is not None:
+        return _method_fallback(fallback_reason, model_name)
 
     confidence_value = payload.get("confidence")
     try:
@@ -449,22 +566,16 @@ def _normalise_method_response(
             raise TypeError
         confidence = float(confidence_value)
     except (TypeError, ValueError):
-        confidence = None
-        fallback_reason = fallback_reason or "method confidence is invalid"
-    if confidence is not None and not 0.0 <= confidence <= 1.0:
-        fallback_reason = fallback_reason or "method confidence is outside [0, 1]"
-
-    if fallback_reason is not None:
-        return {
-            "method_query": None,
-            "method_confidence": None,
-            "method_used_fallback": True,
-            "method_fallback_reason": fallback_reason,
-            "model": model_name,
-        }
+        return _method_fallback("method confidence is invalid", model_name)
+    if not 0.0 <= confidence <= 1.0:
+        return _method_fallback(
+            "method confidence is outside [0, 1]",
+            model_name,
+        )
 
     return {
         "method_query": query,
+        "method_analysis": analysis,
         "method_confidence": confidence,
         "method_used_fallback": False,
         "method_fallback_reason": None,
@@ -642,6 +753,7 @@ def _rewrite_with_worker(
     else:
         method_result = {
             "method_query": None,
+            "method_analysis": None,
             "method_confidence": None,
             "method_used_fallback": False,
             "method_fallback_reason": None,

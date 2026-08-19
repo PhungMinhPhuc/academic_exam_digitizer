@@ -69,8 +69,9 @@ Formula/method rewrite mặc định dùng `qwen3-14b-awq`. Chọn Qwen3-4B bằ
 ```
 
 `formula rewrite` chỉ mô tả từng công thức và không suy diễn. `method rewrite`
-đọc toàn câu hỏi và sinh đúng một truy vấn về kiến thức/phép biến đổi cần dùng,
-không giải bài. Hai nhiệm vụ dùng prompt, schema và fallback độc lập.
+đọc toàn câu hỏi, sinh method query cùng dữ kiện liên quan, mục tiêu, hướng biến
+đổi và phương pháp cần dùng; không giải bài hoặc sinh nhãn curriculum. Hai nhiệm
+vụ dùng prompt, schema và fallback độc lập.
 
 Ba query view được điều khiển riêng:
 
@@ -102,6 +103,21 @@ Modal class khác có cùng contract mà không sửa luồng search. Dùng `--n
   --rerank-model qwen3-reranker-0.6b
 ```
 
+Mặc định reranker vẫn dùng `original_query`. Để thử structured rerank query được
+tạo deterministic từ phần nhỏ đang hỏi và method analysis:
+
+```powershell
+..\.venv\Scripts\python.exe -m rag.search `
+  --method-rewrite `
+  --rerank-query-mode structured `
+  --rerank-method-min-confidence 0.7 `
+  --debug
+```
+
+Nếu method analysis thiếu, sai schema, có confidence dưới ngưỡng hoặc query chứa
+nhiều phần nhỏ chưa tách, structured mode fallback về `original_query`. Candidate
+vẫn đến từ vector + BM25 + RRF; reranker không sinh Grade/Chapter/Lesson.
+
 Các bộ lọc đều tùy chọn:
 
 ```powershell
@@ -118,22 +134,23 @@ Các bộ lọc đều tùy chọn:
 
 Mỗi query view chạy vector + BM25 riêng. Tất cả ranking được hợp nhất bằng RRF
 với `rrf_k=20`; query trùng được loại trước retrieval. Chỉ tối đa 10 kết quả RRF
-đầu được rerank bằng `original_query` trước khi cắt `top_k`.
+đầu được rerank bằng query theo `--rerank-query-mode` trước khi cắt `top_k`.
 Không có `--debug`, output chỉ gồm:
 
 ```json
 {
   "Grade": 10,
-  "Chapter": "Hàm số, đồ thị và ứng dụng",
-  "Lesson": "Hàm số bậc hai",
+  "Chapter": "Chương 1. Hàm số, đồ thị và ứng dụng",
+  "Lesson": "Bài 1. Hàm số bậc hai",
   "Complexity": null
 }
 ```
 
-`--debug` trả thêm `formula_query`, `method_query`, `query_views`, số kết quả theo
-từng retrieval run, rank/score theo từng view, RRF, rerank và thời gian xử lí.
-Tiêu đề chương, bài lấy từ `curriculum.DATA`; nếu không ánh xạ được thì bốn
-trường phân loại đều là `null`.
+`--debug` trả thêm `formula_query`, `method_query`, `method_analysis`, query focus,
+rerank query/mode/fallback, `query_views`, số kết quả theo từng retrieval run,
+rank/score theo từng view, RRF, rerank và thời gian xử lí.
+Tiêu đề chương, bài (bao gồm tiền tố `Chương N.` và `Bài N.`) lấy từ
+`curriculum.DATA`; nếu không ánh xạ được thì bốn trường phân loại đều là `null`.
 
 ## 4. Phân loại nhiều câu hỏi
 

@@ -111,8 +111,8 @@ def select_best_lesson(results: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         return {
             "Grade": int(path["grade"]),
-            "Chapter": CHAPTER_NUMBER_RE.sub("", path["chapter"], count=1).strip(),
-            "Lesson": LESSON_NUMBER_RE.sub("", path["lesson"], count=1).strip(),
+            "Chapter": path["chapter"],
+            "Lesson": path["lesson"],
             "Complexity": None,
         }
     return empty_result

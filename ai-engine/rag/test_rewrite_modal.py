@@ -69,7 +69,31 @@ def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _method_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "relevant_givens": [
+            "vận tốc ban đầu",
+            "gia tốc là hàm theo thời gian",
+        ],
+        "target": "vận tốc tại thời điểm đã cho",
+        "transformation": "từ gia tốc suy ra độ biến thiên vận tốc",
+        "method": "tích phân xác định của gia tốc",
+        "query": "tích phân gia tốc để tìm vận tốc từ điều kiện ban đầu",
+        "confidence": 0.92,
+    }
+    payload.update(overrides)
+    return payload
+
+
 class RewriteModalContractTest(unittest.TestCase):
+    def test_method_prompt_requires_textbook_aligned_knowledge_language(self) -> None:
+        prompt = rewrite_modal.METHOD_SYSTEM_PROMPT
+
+        self.assertIn("ngôn ngữ kiến thức chuẩn", prompt)
+        self.assertIn("đặt tên kiến thức hoặc phép biến đổi chính ở đầu", prompt)
+        self.assertIn("lược bỏ số liệu, thời điểm, tên vật thể", prompt)
+        self.assertIn("tích phân xác định", prompt)
+
     def test_client_can_spawn_non_blocking_rewrite_warmup(self) -> None:
         expected_call = object()
 
@@ -239,29 +263,38 @@ class RewriteModalContractTest(unittest.TestCase):
 
     def test_method_response_returns_one_short_query(self) -> None:
         result = rewrite_modal._normalise_method_response(
-            _json(
-                {
-                    "query": "tích phân gia tốc để tìm vận tốc từ điều kiện ban đầu",
-                    "confidence": 0.92,
-                }
-            )
+            _json(_method_payload())
         )
 
         self.assertEqual(
             result["method_query"],
             "tích phân gia tốc để tìm vận tốc từ điều kiện ban đầu",
         )
+        self.assertEqual(
+            result["method_analysis"]["method"],
+            "tích phân xác định của gia tốc",
+        )
         self.assertEqual(result["method_confidence"], 0.92)
         self.assertFalse(result["method_used_fallback"])
 
     def test_invalid_method_response_falls_back_independently(self) -> None:
         result = rewrite_modal._normalise_method_response(
-            _json({"query": "tính $v(30)$", "confidence": 0.8})
+            _json(_method_payload(query="tính $v(30)$", confidence=0.8))
         )
 
         self.assertIsNone(result["method_query"])
         self.assertTrue(result["method_used_fallback"])
         self.assertIn("contains LaTeX", result["method_fallback_reason"])
+
+    def test_method_response_with_taxonomy_label_falls_back_entirely(self) -> None:
+        result = rewrite_modal._normalise_method_response(
+            _json(_method_payload(method="Lesson: Tích phân"))
+        )
+
+        self.assertIsNone(result["method_query"])
+        self.assertIsNone(result["method_analysis"])
+        self.assertTrue(result["method_used_fallback"])
+        self.assertIn("taxonomy label", result["method_fallback_reason"])
 
 
 if __name__ == "__main__":
